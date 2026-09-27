@@ -68,9 +68,20 @@ def get_expenses(
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
 def create_expense(data: ExpenseCreate, db: Session = Depends(get_db)):
     # Validate category and payer
-    category = db.query(Category).filter(Category.id == data.category_id).first()
+    category = None
+    if data.category_id:
+        category = db.query(Category).filter(Category.id == data.category_id).first()
+    elif data.category_name and data.category_name.strip():
+        cat_name = data.category_name.strip()
+        category = db.query(Category).filter(Category.name.ilike(cat_name)).first()
+        if not category:
+            category = Category(name=cat_name, is_active=True)
+            db.add(category)
+            db.commit()
+            db.refresh(category)
+
     if not category:
-        raise HTTPException(status_code=400, detail="Category not found")
+        raise HTTPException(status_code=400, detail="Category not found or invalid category name provided")
 
     payer = db.query(Member).filter(Member.id == data.paid_by).first()
     if not payer:
@@ -123,7 +134,7 @@ def create_expense(data: ExpenseCreate, db: Session = Depends(get_db)):
         clean_desc = category.name
 
     expense = Expense(
-        category_id=data.category_id,
+        category_id=category.id,
         amount=round(data.amount, 2),
         paid_by=data.paid_by,
         description=clean_desc,
@@ -174,6 +185,15 @@ def update_expense(expense_id: int, data: ExpenseUpdate, db: Session = Depends(g
         if not cat:
             raise HTTPException(status_code=400, detail="Category not found")
         expense.category_id = data.category_id
+    elif data.category_name and data.category_name.strip():
+        cat_name = data.category_name.strip()
+        cat = db.query(Category).filter(Category.name.ilike(cat_name)).first()
+        if not cat:
+            cat = Category(name=cat_name, is_active=True)
+            db.add(cat)
+            db.commit()
+            db.refresh(cat)
+        expense.category_id = cat.id
 
     if data.paid_by is not None:
         payer = db.query(Member).filter(Member.id == data.paid_by).first()

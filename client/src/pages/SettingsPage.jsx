@@ -541,9 +541,12 @@ export default function SettingsPage() {
       {activeTab === 'categories' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-600">
-              Manage initial default categories and create custom categories for your flat.
-            </p>
+            <div>
+              <h3 className="font-bold text-sm text-slate-900">Custom Flat Categories</h3>
+              <p className="text-xs text-slate-500">
+                Categories are completely dynamic. Create and manage custom categories for your flat.
+              </p>
+            </div>
             <button
               onClick={() => {
                 setEditingCategoryId(null);
@@ -551,48 +554,72 @@ export default function SettingsPage() {
                 setCategoryDesc('');
                 setIsCategoryModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shadow-xs shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Category</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {categories.map((c) => (
-              <div
-                key={c.id}
-                className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-3"
-              >
-                <div>
-                  <h3 className="font-bold text-xs text-slate-900">{c.name}</h3>
-                  {c.description && <p className="text-[11px] text-slate-500 mt-0.5">{c.description}</p>}
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => {
-                      setEditingCategoryId(c.id);
-                      setCategoryName(c.name);
-                      setCategoryDesc(c.description || '');
-                      setIsCategoryModalOpen(true);
-                    }}
-                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                    title="Edit"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(c.id)}
-                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+          {categories.length === 0 ? (
+            <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <Tags className="w-6 h-6" />
               </div>
-            ))}
-          </div>
+              <h3 className="font-bold text-sm text-slate-800">No Categories Created Yet</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Predefined categories have been removed. Categories are 100% dynamic! Create your categories here or type them on the fly when recording an expense.
+              </p>
+              <button
+                onClick={() => {
+                  setEditingCategoryId(null);
+                  setCategoryName('');
+                  setCategoryDesc('');
+                  setIsCategoryModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create First Category</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {categories.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <h3 className="font-bold text-xs text-slate-900">{c.name}</h3>
+                    {c.description && <p className="text-[11px] text-slate-500 mt-0.5">{c.description}</p>}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => {
+                        setEditingCategoryId(c.id);
+                        setCategoryName(c.name);
+                        setCategoryDesc(c.description || '');
+                        setIsCategoryModalOpen(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                      title="Edit"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategory(c.id)}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -947,8 +974,8 @@ export default function SettingsPage() {
               <h3 className="font-bold text-base text-slate-900">Confirm Reset Data?</h3>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              This will permanently delete all expense transactions, member splits, and settlements. Your 6 flat
-              members and 11 categories will be kept intact.
+              This will permanently delete all expense transactions, member splits, and settlements. Your flat
+              members and custom categories will be kept intact.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button

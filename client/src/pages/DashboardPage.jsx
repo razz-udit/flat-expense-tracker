@@ -102,7 +102,14 @@ export default function DashboardPage() {
     category_breakdown = []
   } = dashboardData || {};
 
-  const viewerBalanceNum = parseFloat(viewer_net_balance) || 0;
+  const totalYouOwe = (viewer_owes_to || []).reduce(
+    (sum, s) => sum + (parseFloat(s.amount) || 0),
+    0
+  );
+  const totalOwedToYou = (viewer_receivable_from || []).reduce(
+    (sum, s) => sum + (parseFloat(s.amount) || 0),
+    0
+  );
   const hasExpenses = recent_expenses.length > 0;
 
   // Filter expenses: "Your Expenses" vs "All Flat Expenses"
@@ -211,79 +218,87 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {currentUser ? (
           <>
-            {/* 1. Your Net Balance */}
+            {/* 1. You Need to Pay */}
             <div
               className={`p-5 rounded-2xl border shadow-xs relative overflow-hidden transition-all ${
-                viewerBalanceNum > 0.01
-                  ? 'bg-emerald-50/70 border-emerald-200'
-                  : viewerBalanceNum < -0.01
+                totalYouOwe > 0.01
                   ? 'bg-rose-50/70 border-rose-200'
-                  : 'bg-white border-slate-200'
+                  : 'bg-emerald-50/60 border-emerald-200'
               }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                  Your Net Balance
+                  You Need to Pay
                 </span>
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                    viewerBalanceNum > 0.01
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : viewerBalanceNum < -0.01
+                    totalYouOwe > 0.01
                       ? 'bg-rose-100 text-rose-700'
-                      : 'bg-slate-100 text-slate-600'
+                      : 'bg-emerald-100 text-emerald-700'
                   }`}
                 >
-                  {viewerBalanceNum > 0.01 ? (
-                    <ArrowUpRight className="w-4 h-4" />
-                  ) : viewerBalanceNum < -0.01 ? (
+                  {totalYouOwe > 0.01 ? (
                     <ArrowDownLeft className="w-4 h-4" />
                   ) : (
-                    <Scale className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4" />
                   )}
                 </div>
               </div>
               <div
                 className={`text-2xl sm:text-3xl font-black mt-2 tracking-tight ${
-                  viewerBalanceNum > 0.01
-                    ? 'text-emerald-700'
-                    : viewerBalanceNum < -0.01
-                    ? 'text-rose-700'
-                    : 'text-slate-900'
+                  totalYouOwe > 0.01 ? 'text-rose-700' : 'text-emerald-700'
                 }`}
               >
-                {viewerBalanceNum > 0.01
-                  ? `+${formatCurrency(viewerBalanceNum)}`
-                  : viewerBalanceNum < -0.01
-                  ? `-${formatCurrency(Math.abs(viewerBalanceNum))}`
-                  : '₹0.00'}
+                {formatCurrency(totalYouOwe)}
               </div>
               <div className="text-xs font-semibold mt-1">
-                {viewerBalanceNum > 0.01 ? (
-                  <span className="text-emerald-800 font-bold">Flatmates owe you</span>
-                ) : viewerBalanceNum < -0.01 ? (
-                  <span className="text-rose-800 font-bold">You owe flatmates</span>
+                {totalYouOwe > 0.01 ? (
+                  <span className="text-rose-800 font-bold">
+                    Pending to {viewer_owes_to.length} {viewer_owes_to.length === 1 ? 'roommate' : 'roommates'}
+                  </span>
                 ) : (
-                  <span className="text-slate-500 font-medium">All settled up! 🎉</span>
+                  <span className="text-emerald-800 font-medium">No pending dues! 🎉</span>
                 )}
               </div>
             </div>
 
-            {/* 2. Your Share This Month */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            {/* 2. Flatmates Owe You */}
+            <div
+              className={`p-5 rounded-2xl border shadow-xs relative overflow-hidden transition-all ${
+                totalOwedToYou > 0.01
+                  ? 'bg-emerald-50/70 border-emerald-200'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Your Share This Month
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Flatmates Owe You
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
-                  <Scale className="w-4 h-4" />
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    totalOwedToYou > 0.01
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  <ArrowUpRight className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-2xl font-extrabold text-slate-900 mt-2">
-                {formatCurrency(viewer_share)}
+              <div
+                className={`text-2xl sm:text-3xl font-black mt-2 tracking-tight ${
+                  totalOwedToYou > 0.01 ? 'text-emerald-700' : 'text-slate-900'
+                }`}
+              >
+                {formatCurrency(totalOwedToYou)}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Calculated from shared splits
+              <div className="text-xs font-semibold mt-1">
+                {totalOwedToYou > 0.01 ? (
+                  <span className="text-emerald-800 font-bold">
+                    Receivable from {viewer_receivable_from.length} {viewer_receivable_from.length === 1 ? 'roommate' : 'roommates'}
+                  </span>
+                ) : (
+                  <span className="text-slate-500 font-medium">All receivables collected</span>
+                )}
               </div>
             </div>
 
@@ -640,148 +655,125 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Member Balances Table (Right 1 col) */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Flat Net Balances</h2>
-              <p className="text-xs text-slate-500">Status across all roommates</p>
+        {/* Right Column: Settlement Transfers & Spending by Category */}
+        <div className="space-y-5">
+          {/* Who Pays Whom / Settlement Transfers */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Who Pays Whom</h2>
+                <p className="text-xs text-slate-500">Debt clearing transactions</p>
+              </div>
+              <Link to="/settlements" className="text-xs font-semibold text-indigo-600 hover:underline">
+                Full Ledger →
+              </Link>
             </div>
-            <Link to="/settlements" className="text-xs font-semibold text-indigo-600 hover:underline">
-              Ledger →
-            </Link>
-          </div>
 
-          <div className="space-y-2">
-            {balances.map((b) => {
-              const net = parseFloat(b.net_balance) || 0;
-              const isCurrent = b.member_id === currentUser?.id;
+            {suggested_settlements.length === 0 ? (
+              <div className="py-6 text-center bg-slate-50 rounded-xl border border-slate-100">
+                <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto mb-1.5" />
+                <div className="text-xs font-bold text-slate-800">All Flat Dues are Settled! 🎉</div>
+                <p className="text-[11px] text-slate-500 mt-0.5">Every flatmate is even. No transfers needed.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {suggested_settlements.map((s, idx) => {
+                  const isViewerPayer = currentUser && s.from_member_id === currentUser.id;
+                  const isViewerReceiver = currentUser && s.to_member_id === currentUser.id;
 
-              return (
-                <div
-                  key={b.member_id}
-                  className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
-                    isCurrent
-                      ? 'bg-indigo-50/70 border-indigo-200 font-semibold'
-                      : 'bg-slate-50/60 border-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
+                  return (
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isCurrent ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'
+                      key={idx}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-2 text-xs transition-colors ${
+                        isViewerPayer
+                          ? 'bg-rose-50/50 border-rose-200'
+                          : isViewerReceiver
+                          ? 'bg-emerald-50/50 border-emerald-200'
+                          : 'bg-slate-50/80 border-slate-100'
                       }`}
                     >
-                      {b.member_name.charAt(0)}
-                    </div>
-                    <div className="truncate">
-                      <div className="text-xs text-slate-900 truncate">
-                        {b.member_name}
-                        {isCurrent && (
-                          <span className="ml-1.5 text-[10px] px-1.5 py-0.2 rounded bg-indigo-200 text-indigo-800 font-bold">
-                            You
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-bold text-slate-800 truncate">
+                            {isViewerPayer ? 'You' : s.from_member_name}
                           </span>
+                          <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="font-bold text-indigo-700 truncate">
+                            {isViewerReceiver ? 'You' : s.to_member_name}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {isViewerPayer ? 'You owe' : isViewerReceiver ? 'Owes you' : 'Transfer'}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-extrabold text-slate-900 text-xs">
+                          {formatCurrency(s.amount)}
+                        </span>
+                        {isViewerPayer && (
+                          <button
+                            onClick={() =>
+                              openUpiModal({
+                                fromMemberId: s.from_member_id,
+                                fromMemberName: s.from_member_name,
+                                toMemberId: s.to_member_id,
+                                toMemberName: s.to_member_name,
+                                toMemberUpi: s.to_member_upi,
+                                amount: s.amount,
+                                upiLink: s.upi_link,
+                              })
+                            }
+                            className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                          >
+                            Pay
+                          </button>
                         )}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <div
-                      className={`text-xs font-extrabold ${
-                        net > 0.01
-                          ? 'text-emerald-600'
-                          : net < -0.01
-                          ? 'text-rose-600'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {net > 0.01 ? `+${formatCurrency(net)}` : formatCurrency(net)}
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      {net > 0.01 ? 'Owed' : net < -0.01 ? 'Owes' : 'Settled'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Suggested Settlements Mini */}
-          {suggested_settlements.length > 0 && (
-            <div className="pt-3 border-t border-slate-100 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800 uppercase tracking-wider">
-                <span>Suggested Settlements</span>
-                <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                  {suggested_settlements.length}
-                </span>
+          {/* Category Spending Breakdown */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Spending by Category</h2>
+                <p className="text-xs text-slate-500">Categories this month</p>
               </div>
-              <div className="space-y-1.5">
-                {suggested_settlements.slice(0, 3).map((s, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between text-xs"
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-semibold text-slate-700 truncate">{s.from_member_name}</span>
-                      <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                      <span className="font-semibold text-indigo-700 truncate">{s.to_member_name}</span>
+              <Link to="/expenses" className="text-xs font-semibold text-indigo-600 hover:underline">
+                Expenses →
+              </Link>
+            </div>
+
+            {category_breakdown.length === 0 ? (
+              <div className="py-6 text-center bg-slate-50 rounded-xl border border-slate-100">
+                <Receipt className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                <div className="text-xs font-bold text-slate-700">No Category Spending Yet</div>
+                <p className="text-[11px] text-slate-500 mt-0.5">Dynamic categories will show here once added.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {category_breakdown.map((cat) => (
+                  <div key={cat.category_id} className="text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-800 font-semibold">{cat.category_name}</span>
+                      <span className="font-extrabold text-slate-900">{formatCurrency(cat.total_amount)}</span>
                     </div>
-                    <span className="font-bold text-slate-900 shrink-0 ml-2">
-                      {formatCurrency(s.amount)}
-                    </span>
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-1.5 rounded-full"
+                        style={{ width: `${Math.min(parseFloat(cat.percentage), 100)}%` }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Category Budget Equalizer Quick Banner */}
-          <div className="pt-3 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800 uppercase tracking-wider">
-              <span className="flex items-center gap-1.5">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Budget Equalizer</span>
-              </span>
-              <Link to="/settlements" className="text-[11px] text-indigo-600 font-semibold hover:underline">
-                View & Equalize →
-              </Link>
-            </div>
-            <div className="p-3 bg-gradient-to-r from-indigo-50/70 to-purple-50/60 rounded-xl border border-indigo-100 text-xs space-y-1">
-              <div className="font-bold text-indigo-950 flex items-center justify-between">
-                <span>Roommate Category Budgets</span>
-                <span className="text-[9px] bg-indigo-200/60 text-indigo-800 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                  Active
-                </span>
-              </div>
-              <p className="text-[11px] text-indigo-800/80 leading-relaxed">
-                Set monthly targets per member (e.g. ₹1,500 Grocery). Overpaid & underpaid shares balance automatically.
-              </p>
-            </div>
+            )}
           </div>
-
-          {/* Category Breakdown preview */}
-          {category_breakdown.length > 0 && (
-            <div className="pt-3 border-t border-slate-100 space-y-2">
-              <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Top Spending
-              </div>
-              {category_breakdown.slice(0, 3).map((cat) => (
-                <div key={cat.category_id} className="text-xs space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-700 font-medium">{cat.category_name}</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(cat.total_amount)}</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-indigo-600 h-1.5 rounded-full"
-                      style={{ width: `${Math.min(parseFloat(cat.percentage), 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

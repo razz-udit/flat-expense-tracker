@@ -18,7 +18,8 @@ class ExpenseSplitOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ExpenseBase(BaseModel):
-    category_id: int
+    category_id: Optional[int] = None
+    category_name: Optional[str] = Field(None, max_length=100)
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     paid_by: int
     description: Optional[str] = Field(None, max_length=255)
@@ -32,6 +33,12 @@ class ExpenseBase(BaseModel):
 class ExpenseCreate(ExpenseBase):
     splits: Optional[List[ExpenseSplitInput]] = None
     member_ids: Optional[List[int]] = None # For quick equal split
+
+    @model_validator(mode="after")
+    def validate_category(self):
+        if not self.category_id and not (self.category_name and self.category_name.strip()):
+            raise ValueError("Either category_id or a dynamic category_name must be provided.")
+        return self
 
     @model_validator(mode="after")
     def validate_splits(self):
@@ -52,6 +59,7 @@ class ExpenseCreate(ExpenseBase):
 
 class ExpenseUpdate(BaseModel):
     category_id: Optional[int] = None
+    category_name: Optional[str] = Field(None, max_length=100)
     amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
     paid_by: Optional[int] = None
     description: Optional[str] = Field(None, min_length=1, max_length=255)
