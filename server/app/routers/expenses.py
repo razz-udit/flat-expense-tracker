@@ -106,11 +106,27 @@ def create_expense(data: ExpenseCreate, db: Session = Depends(get_db)):
                 raise HTTPException(status_code=400, detail=f"Member ID {s.member_id} does not exist")
             split_records.append((s.member_id, round(s.amount, 2)))
 
+    # Category description validation:
+    # General categories (like Grocery, Provisions) require a description.
+    # Specific product categories (like LPG Gas, Electricity, WiFi, Maid) do not require a description and default to category name.
+    GENERAL_CATEGORY_KEYWORDS = ["grocery", "groceries", "general", "supplies", "provisions", "other", "misc", "food", "market", "vegetable", "items"]
+    cat_name_lower = (category.name or "").lower().strip()
+    is_general = any(k in cat_name_lower for k in GENERAL_CATEGORY_KEYWORDS)
+
+    clean_desc = (data.description or "").strip()
+    if is_general and not clean_desc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Description is mandatory for general categories like {category.name} (e.g. Vegetables, Milk, Oil)."
+        )
+    if not clean_desc:
+        clean_desc = category.name
+
     expense = Expense(
         category_id=data.category_id,
         amount=round(data.amount, 2),
         paid_by=data.paid_by,
-        description=data.description.strip(),
+        description=clean_desc,
         expense_date=data.expense_date,
         billing_period_start=data.billing_period_start,
         billing_period_end=data.billing_period_end,

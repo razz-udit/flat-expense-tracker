@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { api } from '../services/api';
 import { X, AlertCircle, Check, Users, Receipt, CalendarRange } from 'lucide-react';
 
 export default function AddExpenseModal({ onExpenseSaved }) {
@@ -140,6 +141,15 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     setCustomSplits(newSplits);
   };
 
+  const selectedCategory = categories.find((c) => c.id === parseInt(categoryId, 10));
+  const isGeneralCategory = (cat) => {
+    if (!cat) return true;
+    const name = (cat.name || '').toLowerCase().trim();
+    const generalKeywords = ['grocery', 'groceries', 'general', 'supplies', 'provisions', 'other', 'misc', 'food', 'market', 'vegetable', 'items'];
+    return generalKeywords.some((k) => name.includes(k));
+  };
+  const isDescriptionMandatory = isGeneralCategory(selectedCategory);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setValidationError('');
@@ -149,10 +159,16 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       return;
     }
 
-    if (!description.trim()) {
-      setValidationError('Please enter a description for the expense.');
+    const trimmedDesc = description.trim();
+    if (isDescriptionMandatory && !trimmedDesc) {
+      setValidationError(
+        `Description is mandatory for "${selectedCategory?.name || 'Grocery'}". Please specify what was purchased (e.g. Milk, Vegetables, Cooking Oil).`
+      );
       return;
     }
+
+    // Specific product categories (like LPG Gas, Electricity, WiFi, Maid) default to category name if empty
+    const finalDescription = trimmedDesc || (selectedCategory?.name || 'Shared Expense');
 
     if (selectedMemberIds.length === 0) {
       setValidationError('Please select at least one member to participate in the split.');
@@ -180,7 +196,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       category_id: parseInt(categoryId, 10),
       amount: parsedAmount,
       paid_by: parseInt(paidBy, 10),
-      description: description.trim(),
+      description: finalDescription,
       expense_date: expenseDate,
       billing_period_start: hasBillingPeriod && billingStart ? billingStart : null,
       billing_period_end: hasBillingPeriod && billingEnd ? billingEnd : null,
@@ -315,13 +331,28 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Description *
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+              <span>
+                Description {isDescriptionMandatory ? (
+                  <span className="text-rose-500 font-bold">*</span>
+                ) : (
+                  <span className="text-slate-400 font-normal lowercase">(optional for {selectedCategory?.name || 'this item'})</span>
+                )}
+              </span>
+              {!isDescriptionMandatory && !description.trim() && (
+                <span className="text-[11px] text-indigo-600 font-medium lowercase">
+                  defaults to "{selectedCategory?.name || 'Category'}"
+                </span>
+              )}
             </label>
             <input
               type="text"
-              required
-              placeholder="e.g. Monthly grocery, WiFi bill, Water purifier"
+              required={isDescriptionMandatory}
+              placeholder={
+                isDescriptionMandatory
+                  ? `e.g. Vegetables, Milk, Cooking Oil (mandatory for ${selectedCategory?.name || 'Grocery'})`
+                  : `e.g. ${selectedCategory?.name || 'LPG Cylinder'} (optional - leave blank to use category name)`
+              }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"

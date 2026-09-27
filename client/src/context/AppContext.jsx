@@ -138,23 +138,46 @@ export function AppProvider({ children }) {
   const openAddExpense = (expenseToEdit = null) => {
     setEditingExpense(expenseToEdit);
     setIsExpenseModalOpen(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ modal: 'expense' }, '');
+    }
   };
 
   const closeAddExpense = () => {
     setEditingExpense(null);
     setIsExpenseModalOpen(false);
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'expense') {
+      window.history.back();
+    }
   };
 
   const openUpiModal = (info) => {
     setUpiModalInfo(info);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ modal: 'upi' }, '');
+    }
   };
 
   const closeUpiModal = () => {
     setUpiModalInfo(null);
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'upi') {
+      window.history.back();
+    }
   };
 
-  const openInstallModal = () => setIsInstallModalOpen(true);
-  const closeInstallModal = () => setIsInstallModalOpen(false);
+  const openInstallModal = () => {
+    setIsInstallModalOpen(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ modal: 'install' }, '');
+    }
+  };
+
+  const closeInstallModal = () => {
+    setIsInstallModalOpen(false);
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'install') {
+      window.history.back();
+    }
+  };
 
   const promptInstall = async () => {
     if (deferredPrompt) {
@@ -168,12 +191,55 @@ export function AppProvider({ children }) {
         setCanInstallPrompt(false);
       } catch (err) {
         console.error('Install prompt error:', err);
-        setIsInstallModalOpen(true);
+        openInstallModal();
       }
     } else {
-      setIsInstallModalOpen(true);
+      openInstallModal();
     }
   };
+
+  // Hardware Back Button Interception for Android / Mobile
+  useEffect(() => {
+    let lastBackPressTime = 0;
+
+    const handlePopState = () => {
+      // 1. If any global modal is open, close it without exiting the app
+      if (isExpenseModalOpen) {
+        setIsExpenseModalOpen(false);
+        setEditingExpense(null);
+        return;
+      }
+      if (upiModalInfo) {
+        setUpiModalInfo(null);
+        return;
+      }
+      if (isInstallModalOpen) {
+        setIsInstallModalOpen(false);
+        return;
+      }
+
+      // 2. If on root path '/', prevent accidental exit with double-press confirmation
+      if (typeof window !== 'undefined' && window.location.pathname === '/') {
+        const now = Date.now();
+        if (now - lastBackPressTime < 2500) {
+          // Second back press within 2.5s: allow normal browser exit
+          return;
+        }
+        // First back press: keep user in app and prompt
+        lastBackPressTime = now;
+        window.history.pushState({ app: 'flatmatepay', root: true }, '');
+        addToast('Press back again to exit FlatMatePay', 'info');
+      }
+    };
+
+    // Initialize root history entry so back button doesn't immediately exit
+    if (typeof window !== 'undefined' && !window.history.state) {
+      window.history.replaceState({ app: 'flatmatepay', root: true }, '');
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isExpenseModalOpen, upiModalInfo, isInstallModalOpen, addToast]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
