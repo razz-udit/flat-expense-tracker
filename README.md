@@ -1,6 +1,8 @@
 # FlatMatePay - Personal Flat Expense & Payment Manager
 
-A personal flat expense and settlement manager built for a flat shared by exactly 6 members. It tracks collective household expenses, calculates each member's share (supporting both equal and custom splits), minimizes peer-to-peer debts, generates UPI deep links / QR codes, records payments, and maintains complete monthly expense history.
+A modern, dynamic flat expense and settlement manager with mandatory UPI ID onboarding, peer-to-peer settlement tracking, and Category Budget Equalizer.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/razz-udit/flat-expense-tracker)
 
 ---
 
