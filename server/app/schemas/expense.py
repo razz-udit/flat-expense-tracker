@@ -21,7 +21,7 @@ class ExpenseBase(BaseModel):
     category_id: int
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     paid_by: int
-    description: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=255)
     expense_date: date
     billing_period_start: Optional[date] = None
     billing_period_end: Optional[date] = None

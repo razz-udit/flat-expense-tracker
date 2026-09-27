@@ -102,7 +102,33 @@ export default function SettlementsPage() {
       setNotes('');
     }
     setIsRecordModalOpen(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ modal: 'record-payment' }, '');
+    }
   };
+
+  const handleCloseRecordModal = () => {
+    setIsRecordModalOpen(false);
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'record-payment') {
+      window.history.back();
+    }
+  };
+
+  const handleCloseBudgetModal = () => {
+    setIsBudgetModalOpen(false);
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'budget-modal') {
+      window.history.back();
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isRecordModalOpen) setIsRecordModalOpen(false);
+      if (isBudgetModalOpen) setIsBudgetModalOpen(false);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isRecordModalOpen, isBudgetModalOpen]);
 
   const handleRecordPayment = async (e) => {
     e.preventDefault();
@@ -129,7 +155,7 @@ export default function SettlementsPage() {
         notes: notes.trim() || null
       });
       addToast('Payment recorded successfully!', 'success');
-      setIsRecordModalOpen(false);
+      handleCloseRecordModal();
       fetchSettlementData();
     } catch (err) {
       console.error('Error recording payment:', err);
@@ -185,6 +211,9 @@ export default function SettlementsPage() {
       setBudgetPerMemberInput('');
     }
     setIsBudgetModalOpen(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ modal: 'budget-modal' }, '');
+    }
   };
 
   const handleSaveCategoryBudget = async (e) => {
@@ -205,7 +234,7 @@ export default function SettlementsPage() {
         monthly_budget_per_member: val
       });
       addToast('Category monthly budget per member updated successfully!', 'success');
-      setIsBudgetModalOpen(false);
+      handleCloseBudgetModal();
       fetchSettlementData();
     } catch (err) {
       console.error('Error updating category budget:', err);
@@ -917,7 +946,7 @@ export default function SettlementsPage() {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="font-bold text-base text-slate-900">Record Settlement Payment</h3>
               <button
-                onClick={() => setIsRecordModalOpen(false)}
+                onClick={handleCloseRecordModal}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1085,7 +1114,7 @@ export default function SettlementsPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsRecordModalOpen(false)}
+                  onClick={handleCloseRecordModal}
                   className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                 >
                   Cancel
@@ -1110,7 +1139,7 @@ export default function SettlementsPage() {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="font-bold text-base text-slate-900">Set Monthly Category Budget</h3>
               <button
-                onClick={() => setIsBudgetModalOpen(false)}
+                onClick={handleCloseBudgetModal}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1157,7 +1186,7 @@ export default function SettlementsPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsBudgetModalOpen(false)}
+                  onClick={handleCloseBudgetModal}
                   className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                 >
                   Cancel
