@@ -1,0 +1,12 @@
+node_modules
+.venv
+__pycache__
+*.pyc
+*.db
+*.sqlite3
+.git
+.gitignore
+.env
+.gemini
+scratch
+.system_generated
