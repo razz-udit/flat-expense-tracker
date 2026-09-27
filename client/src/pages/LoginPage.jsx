@@ -13,11 +13,13 @@ import {
   EyeOff,
   ShieldCheck,
   UserPlus,
-  Sparkles
+  Sparkles,
+  Download,
+  Smartphone
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { loginWithCredentials, signupAndLogin, addToast } = useApp();
+  const { loginWithCredentials, signupAndLogin, addToast, promptInstall } = useApp();
 
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
 
@@ -124,10 +126,15 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-semibold bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Secure Flat Portal</span>
-        </div>
+        <button
+          type="button"
+          onClick={promptInstall}
+          className="flex items-center gap-1.5 text-xs text-white font-bold bg-white/10 hover:bg-white/20 active:scale-95 px-3 py-1.5 rounded-xl border border-white/20 shadow-sm transition-all cursor-pointer"
+          title="Install FlatMatePay App"
+        >
+          <Download className="w-3.5 h-3.5 text-indigo-300" />
+          <span>Install App</span>
+        </button>
       </header>
 
       {/* Main Card */}
@@ -400,6 +407,21 @@ export default function LoginPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Mobile Install App banner */}
+        <div className="mt-3 p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between text-xs backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-indigo-400" />
+            <span className="text-slate-300">Using FlatMatePay on mobile?</span>
+          </div>
+          <button
+            type="button"
+            onClick={promptInstall}
+            className="text-indigo-300 font-bold hover:text-white underline cursor-pointer"
+          >
+            Install to Home Screen →
+          </button>
         </div>
       </main>
 
