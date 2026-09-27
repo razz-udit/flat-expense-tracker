@@ -338,18 +338,6 @@ export default function SettlementsPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('balances')}
-          className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'balances'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Scale className="w-4 h-4" />
-          <span>Net Balances Ledger</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('history')}
           className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'history'
@@ -500,8 +488,19 @@ export default function SettlementsPage() {
           </div>
 
           {/* Category Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {categoryBudgets.map((cat) => {
+          {categoryBudgets.length === 0 ? (
+            <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <SlidersHorizontal className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-sm text-slate-800">No Categories Created Yet</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Categories are completely dynamic. Create custom categories when recording an expense or in Settings to set monthly member budgets.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {categoryBudgets.map((cat) => {
               const hasBudget = cat.monthly_budget_per_member !== null && cat.monthly_budget_per_member !== undefined;
               const targetPerMember = hasBudget ? parseFloat(cat.monthly_budget_per_member) : 0;
               const totalBudget = hasBudget && cat.total_budget ? parseFloat(cat.total_budget) : 0;
@@ -725,86 +724,11 @@ export default function SettlementsPage() {
                 </div>
               );
             })}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Tab Content 3: Net Balances Ledger */}
-      {activeTab === 'balances' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-900">Flat Members Financial Ledger</h2>
-            <p className="text-xs text-slate-500">
-              Net Balance = (Expenses Paid + Settlements Sent) - (Share Owed + Settlements Received)
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4">Member</th>
-                  <th className="py-3 px-4 text-right">Expenses Paid (+)</th>
-                  <th className="py-3 px-4 text-right">Settlements Sent (+)</th>
-                  <th className="py-3 px-4 text-right">Share Owed (-)</th>
-                  <th className="py-3 px-4 text-right">Settlements Recv (-)</th>
-                  <th className="py-3 px-4 text-right">Net Balance</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {balances.map((b) => {
-                  const net = parseFloat(b.net_balance);
-                  return (
-                    <tr key={b.member_id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{b.member_name}</div>
-                        {b.upi_id && <div className="text-[10px] text-slate-400 font-mono">{b.upi_id}</div>}
-                      </td>
-                      <td className="py-3.5 px-4 text-right text-slate-700 font-medium">
-                        {formatCurrency(b.total_paid)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">
-                        {formatCurrency(b.settlements_paid)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right text-slate-700 font-medium">
-                        {formatCurrency(b.total_owed)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">
-                        {formatCurrency(b.settlements_received)}
-                      </td>
-                      <td
-                        className={`py-3.5 px-4 text-right font-extrabold text-sm ${
-                          net > 0.01
-                            ? 'text-emerald-600'
-                            : net < -0.01
-                            ? 'text-rose-600'
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        {net > 0.01 ? `+${formatCurrency(net)}` : formatCurrency(net)}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                            b.status === 'Receivable'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : b.status === 'Owes'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {b.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Tab Content 4: Settlements History */}
       {activeTab === 'history' && (

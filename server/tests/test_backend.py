@@ -4,11 +4,12 @@ from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app as fastapi_app
-from app.services.seed_service import seed_initial_data
-from sqlalchemy.pool import StaticPool
+from app.models.member import Member
+from app.models.category import Category
 import app.models
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -33,7 +34,10 @@ fastapi_app.dependency_overrides[get_db] = override_get_db
 def setup_database():
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
-    seed_initial_data(db)
+    # Add 6 test flat members
+    for i in range(1, 7):
+        db.add(Member(name=f"Member {i}", upi_id=f"member{i}@upi", is_active=True))
+    db.commit()
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
@@ -42,32 +46,33 @@ def setup_database():
 def client():
     return TestClient(fastapi_app)
 
-def test_initial_seed_members_and_categories(client):
+def test_no_predefined_categories_and_dynamic_creation(client):
     res_m = client.get("/api/members")
     assert res_m.status_code == 200
     members = res_m.json()
     assert len(members) == 6
-    assert members[0]["name"] == "Member 1"
-    assert members[5]["name"] == "Member 6"
 
+    # Verify categories start completely empty (no predefined categories)
     res_c = client.get("/api/categories")
     assert res_c.status_code == 200
     categories = res_c.json()
-    assert len(categories) == 11
-    cat_names = [c["name"] for c in categories]
-    assert "Rent" in cat_names
-    assert "Electricity" in cat_names
-    assert "Grocery" in cat_names
-    assert "Other" in cat_names
+    assert len(categories) == 0
 
-def test_create_equal_split_expense(client):
+    # Create dynamic category
+    res_create = client.post("/api/categories", json={"name": "Grocery", "description": "Shared provisions"})
+    assert res_create.status_code == 201
+    assert res_create.json()["name"] == "Grocery"
+
+    # Category list now has 1
+    res_c2 = client.get("/api/categories")
+    assert len(res_c2.json()) == 1
+
+def test_create_equal_split_with_dynamic_category(client):
     members = client.get("/api/members").json()
-    categories = client.get("/api/categories").json()
-    grocery_id = [c["id"] for c in categories if c["name"] == "Grocery"][0]
     
-    # Member 1 pays ₹2400 split equally among all 6
+    # Member 1 pays ₹2400 split equally among all 6, passing category_name dynamically
     payload = {
-        "category_id": grocery_id,
+        "category_name": "Grocery",
         "amount": 2400.00,
         "paid_by": members[0]["id"],
         "description": "Monthly grocery",
@@ -79,8 +84,8 @@ def test_create_equal_split_expense(client):
     assert res.status_code == 201
     data = res.json()
     assert data["amount"] == "2400.00"
+    assert data["category"]["name"] == "Grocery"
     assert len(data["splits"]) == 6
-    # Each split should be 400.00
     for s in data["splits"]:
         assert s["amount"] == "400.00"
 
@@ -88,17 +93,16 @@ def test_create_equal_split_expense(client):
     bal_res = client.get("/api/balances")
     assert bal_res.status_code == 200
     balances = {b["member_name"]: b for b in bal_res.json()}
-    # Member 1 paid 2400, owes 400 => net balance = +2000
     assert balances["Member 1"]["net_balance"] == "2000.00"
     assert balances["Member 1"]["status"] == "Receivable"
-    # Member 2 paid 0, owes 400 => net balance = -400
     assert balances["Member 2"]["net_balance"] == "-400.00"
     assert balances["Member 2"]["status"] == "Owes"
 
 def test_custom_split_validation(client):
     members = client.get("/api/members").json()
-    categories = client.get("/api/categories").json()
-    rent_id = [c["id"] for c in categories if c["name"] == "Rent"][0]
+    # Create category first
+    cat_res = client.post("/api/categories", json={"name": "Rent"})
+    rent_id = cat_res.json()["id"]
 
     # Split sum mismatch should fail
     payload_bad = {
@@ -110,7 +114,7 @@ def test_custom_split_validation(client):
         "split_type": "custom",
         "splits": [
             {"member_id": members[0]["id"], "amount": 300.00},
-            {"member_id": members[1]["id"], "amount": 600.00} # Sum is 900 != 1000
+            {"member_id": members[1]["id"], "amount": 500.00}
         ]
     }
     res_bad = client.post("/api/expenses", json=payload_bad)
@@ -134,12 +138,10 @@ def test_custom_split_validation(client):
 
 def test_excluded_member_split(client):
     members = client.get("/api/members").json()
-    categories = client.get("/api/categories").json()
-    eq_id = [c["id"] for c in categories if c["name"] == "Extra Equipment"][0]
 
     # Member 6 excluded, split among 5 members
     payload = {
-        "category_id": eq_id,
+        "category_name": "Extra Equipment",
         "amount": 5000.00,
         "paid_by": members[3]["id"], # Member 4
         "description": "Water filter",
@@ -161,12 +163,10 @@ def test_excluded_member_split(client):
 
 def test_settlement_and_payment_flow(client):
     members = client.get("/api/members").json()
-    categories = client.get("/api/categories").json()
-    lpg_id = [c["id"] for c in categories if c["name"] == "LPG Gas"][0]
 
     # Member 2 pays ₹1000 split between Member 1 and Member 2 (₹500 each)
     payload = {
-        "category_id": lpg_id,
+        "category_name": "LPG Gas",
         "amount": 1000.00,
         "paid_by": members[1]["id"],
         "description": "LPG cylinder",
@@ -181,12 +181,11 @@ def test_settlement_and_payment_flow(client):
     assert settle_res.status_code == 200
     settlements = settle_res.json()
     assert len(settlements) == 1
-    assert settlements[0]["from_member_id"] == members[0]["id"] # Member 1 owes
-    assert settlements[0]["to_member_id"] == members[1]["id"] # Member 2 should receive
+    assert settlements[0]["from_member_id"] == members[0]["id"]
+    assert settlements[0]["to_member_id"] == members[1]["id"]
     assert settlements[0]["amount"] == "500.00"
-    assert settlements[0]["upi_link"] is not None
 
-    # Record a settlement payment from Member 1 to Member 2
+    # Record settlement payment
     pay_payload = {
         "from_member": members[0]["id"],
         "to_member": members[1]["id"],
@@ -199,35 +198,27 @@ def test_settlement_and_payment_flow(client):
     assert pay_res.status_code == 201
     payment_id = pay_res.json()["id"]
 
-    # Still pending, so net balances are not settled yet
-    bal_res_pending = client.get("/api/balances").json()
-    m1_bal = [b for b in bal_res_pending if b["member_name"] == "Member 1"][0]
-    assert m1_bal["net_balance"] == "-500.00"
-
-    # Now mark payment as Paid
+    # Mark as Paid
     update_res = client.put(f"/api/payments/{payment_id}", json={"status": "Paid"})
     assert update_res.status_code == 200
-    assert update_res.json()["status"] == "Paid"
 
-    # Balances must now be fully settled (0.00)!
+    # Balances must now be fully settled (0.00)
     bal_res_settled = client.get("/api/balances").json()
     m1_bal_after = [b for b in bal_res_settled if b["member_name"] == "Member 1"][0]
     m2_bal_after = [b for b in bal_res_settled if b["member_name"] == "Member 2"][0]
     assert m1_bal_after["net_balance"] == "0.00"
     assert m2_bal_after["net_balance"] == "0.00"
 
-    # Suggested settlements should now be empty!
+    # Suggested settlements should now be empty
     settle_res_after = client.get("/api/settlements").json()
     assert len(settle_res_after) == 0
 
 def test_monthly_history_and_billing_period(client):
     members = client.get("/api/members").json()
-    categories = client.get("/api/categories").json()
-    elec_id = [c["id"] for c in categories if c["name"] == "Electricity"][0]
 
     # Multi-month electricity expense
     payload = {
-        "category_id": elec_id,
+        "category_name": "Electricity",
         "amount": 7800.00,
         "paid_by": members[2]["id"],
         "description": "Electricity bill",

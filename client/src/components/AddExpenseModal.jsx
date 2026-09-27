@@ -11,10 +11,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     isExpenseModalOpen,
     editingExpense,
     closeAddExpense,
+    refreshMeta,
     addToast
   } = useApp();
 
   const [categoryId, setCategoryId] = useState('');
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState('');
   const [expenseDate, setExpenseDate] = useState('');
@@ -41,7 +44,9 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
     if (editingExpense) {
       // Editing existing expense
-      setCategoryId(editingExpense.category_id || (categories[0]?.id || ''));
+      setCategoryId(editingExpense.category_id ? editingExpense.category_id.toString() : '');
+      setCustomCategoryInput('');
+      setIsCreatingNewCategory(false);
       setAmount(editingExpense.amount?.toString() || '');
       setPaidBy(editingExpense.paid_by || (members[0]?.id || ''));
       setExpenseDate(editingExpense.expense_date || todayStr);
@@ -70,7 +75,14 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       setCustomSplits(customMap);
     } else {
       // New expense defaults
-      setCategoryId(categories[0]?.id || '');
+      if (categories && categories.length > 0) {
+        setCategoryId(categories[0].id.toString());
+        setIsCreatingNewCategory(false);
+      } else {
+        setCategoryId('');
+        setIsCreatingNewCategory(true);
+      }
+      setCustomCategoryInput('');
       setAmount('');
       setPaidBy(activeMemberId || members[0]?.id || '');
       setExpenseDate(todayStr);
@@ -141,14 +153,18 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     setCustomSplits(newSplits);
   };
 
-  const selectedCategory = categories.find((c) => c.id === parseInt(categoryId, 10));
-  const isGeneralCategory = (cat) => {
-    if (!cat) return true;
-    const name = (cat.name || '').toLowerCase().trim();
+  const selectedCategory = categories.find((c) => c.id.toString() === categoryId?.toString());
+  const currentCategoryName = (isCreatingNewCategory || categories.length === 0)
+    ? customCategoryInput.trim()
+    : (selectedCategory?.name || '');
+
+  const isGeneralCategory = (catName) => {
+    if (!catName) return false;
+    const name = catName.toLowerCase().trim();
     const generalKeywords = ['grocery', 'groceries', 'general', 'supplies', 'provisions', 'other', 'misc', 'food', 'market', 'vegetable', 'items'];
     return generalKeywords.some((k) => name.includes(k));
   };
-  const isDescriptionMandatory = isGeneralCategory(selectedCategory);
+  const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -159,16 +175,40 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       return;
     }
 
+    let finalCategoryId = undefined;
+    let finalCategoryName = undefined;
+
+    if (isCreatingNewCategory || categories.length === 0) {
+      const trimmedCat = customCategoryInput.trim();
+      if (!trimmedCat) {
+        setValidationError('Please enter a category name (e.g. Grocery, WiFi, Snacks, Milk).');
+        return;
+      }
+      const existing = categories.find((c) => c.name.toLowerCase() === trimmedCat.toLowerCase());
+      if (existing) {
+        finalCategoryId = existing.id;
+      } else {
+        finalCategoryName = trimmedCat;
+      }
+    } else {
+      if (!categoryId) {
+        setValidationError('Please select or create a category.');
+        return;
+      }
+      finalCategoryId = parseInt(categoryId, 10);
+    }
+
+    const displayCategoryName = currentCategoryName || 'Shared Expense';
     const trimmedDesc = description.trim();
     if (isDescriptionMandatory && !trimmedDesc) {
       setValidationError(
-        `Description is mandatory for "${selectedCategory?.name || 'Grocery'}". Please specify what was purchased (e.g. Milk, Vegetables, Cooking Oil).`
+        `Description is mandatory for "${displayCategoryName}". Please specify what was purchased (e.g. Milk, Vegetables, Cooking Oil).`
       );
       return;
     }
 
     // Specific product categories (like LPG Gas, Electricity, WiFi, Maid) default to category name if empty
-    const finalDescription = trimmedDesc || (selectedCategory?.name || 'Shared Expense');
+    const finalDescription = trimmedDesc || displayCategoryName;
 
     if (selectedMemberIds.length === 0) {
       setValidationError('Please select at least one member to participate in the split.');
@@ -193,7 +233,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     }
 
     const payload = {
-      category_id: parseInt(categoryId, 10),
+      category_id: finalCategoryId,
+      category_name: finalCategoryName,
       amount: parsedAmount,
       paid_by: parseInt(paidBy, 10),
       description: finalDescription,
@@ -215,6 +256,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
         await api.createExpense(payload);
         addToast('New flat expense added successfully!', 'success');
       }
+      await refreshMeta();
       closeAddExpense();
       if (onExpenseSaved) onExpenseSaved();
     } catch (err) {
@@ -275,21 +317,65 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Category *
-              </label>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Category *
+                </label>
+                {categories.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNewCategory(!isCreatingNewCategory);
+                      if (isCreatingNewCategory) {
+                        setCustomCategoryInput('');
+                        setCategoryId(categories[0]?.id.toString() || '');
+                      }
+                    }}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                  >
+                    {isCreatingNewCategory ? '← Choose Existing' : '+ New Category'}
+                  </button>
+                )}
+              </div>
+
+              {isCreatingNewCategory || categories.length === 0 ? (
+                <div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter category (e.g. Grocery, WiFi, Electricity, Snacks)..."
+                    value={customCategoryInput}
+                    onChange={(e) => setCustomCategoryInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 bg-indigo-50/20"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Categories are completely dynamic. Type any category and it will be saved for your flat.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  value={categoryId}
+                  onChange={(e) => {
+                    if (e.target.value === '__NEW__') {
+                      setIsCreatingNewCategory(true);
+                      setCustomCategoryInput('');
+                    } else {
+                      setCategoryId(e.target.value);
+                    }
+                  }}
+                  required
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 bg-white"
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                  <option value="__NEW__" className="text-indigo-600 font-bold">
+                    + Create New Category...
                   </option>
-                ))}
-              </select>
+                </select>
+              )}
             </div>
           </div>
 
@@ -336,12 +422,12 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 Description {isDescriptionMandatory ? (
                   <span className="text-rose-500 font-bold">*</span>
                 ) : (
-                  <span className="text-slate-400 font-normal lowercase">(optional for {selectedCategory?.name || 'this item'})</span>
+                  <span className="text-slate-400 font-normal lowercase">(optional for {currentCategoryName || 'this item'})</span>
                 )}
               </span>
               {!isDescriptionMandatory && !description.trim() && (
                 <span className="text-[11px] text-indigo-600 font-medium lowercase">
-                  defaults to "{selectedCategory?.name || 'Category'}"
+                  defaults to "{currentCategoryName || 'Category'}"
                 </span>
               )}
             </label>
@@ -350,8 +436,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               required={isDescriptionMandatory}
               placeholder={
                 isDescriptionMandatory
-                  ? `e.g. Vegetables, Milk, Cooking Oil (mandatory for ${selectedCategory?.name || 'Grocery'})`
-                  : `e.g. ${selectedCategory?.name || 'LPG Cylinder'} (optional - leave blank to use category name)`
+                  ? `e.g. Vegetables, Milk, Cooking Oil (mandatory for ${currentCategoryName || 'Grocery'})`
+                  : `e.g. ${currentCategoryName || 'Details'} (optional - leave blank to use category name)`
               }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
