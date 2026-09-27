@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import ToastContainer from './components/ToastContainer';
 import AddExpenseModal from './components/AddExpenseModal';
 import UpiPayModal from './components/UpiPayModal';
+import InstallAppModal from './components/InstallAppModal';
 
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -15,7 +16,7 @@ import RecurringPage from './pages/RecurringPage';
 import SettingsPage from './pages/SettingsPage';
 
 function AppContent() {
-  const { currentUser, isLoadingMeta } = useApp();
+  const { currentUser, isLoadingMeta, isInstallModalOpen, closeInstallModal } = useApp();
 
   if (isLoadingMeta) {
     return (
@@ -31,6 +32,7 @@ function AppContent() {
     return (
       <>
         <LoginPage />
+        <InstallAppModal isOpen={isInstallModalOpen} onClose={closeInstallModal} />
         <ToastContainer />
       </>
     );
@@ -54,6 +56,7 @@ function AppContent() {
       {/* Global Modals & Notifications */}
       <AddExpenseModal />
       <UpiPayModal />
+      <InstallAppModal isOpen={isInstallModalOpen} onClose={closeInstallModal} />
       <ToastContainer />
     </div>
   );

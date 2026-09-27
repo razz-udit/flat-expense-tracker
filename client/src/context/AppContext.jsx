@@ -17,6 +17,17 @@ export function AppProvider({ children }) {
   const [editingExpense, setEditingExpense] = useState(null);
   const [upiModalInfo, setUpiModalInfo] = useState(null); // { toName, toUpi, amount, upiLink, notes, paymentId }
 
+  // PWA Installation State
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [canInstallPrompt, setCanInstallPrompt] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  });
+
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
   // Toast notification state
   const [toasts, setToasts] = useState([]);
 
@@ -142,6 +153,52 @@ export function AppProvider({ children }) {
     setUpiModalInfo(null);
   };
 
+  const openInstallModal = () => setIsInstallModalOpen(true);
+  const closeInstallModal = () => setIsInstallModalOpen(false);
+
+  const promptInstall = async () => {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          addToast('Thank you for installing FlatMatePay! Launch it from your home screen.', 'success');
+        }
+        setDeferredPrompt(null);
+        setCanInstallPrompt(false);
+      } catch (err) {
+        console.error('Install prompt error:', err);
+        setIsInstallModalOpen(true);
+      }
+    } else {
+      setIsInstallModalOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setCanInstallPrompt(true);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setCanInstallPrompt(false);
+      setDeferredPrompt(null);
+      setIsInstallModalOpen(false);
+      addToast('FlatMatePay was installed successfully! 📱', 'success');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, [addToast]);
+
   const currentUser = members.find((m) => m.id === activeMemberId) || null;
 
   return (
@@ -169,6 +226,13 @@ export function AppProvider({ children }) {
         upiModalInfo,
         openUpiModal,
         closeUpiModal,
+        isInstallModalOpen,
+        openInstallModal,
+        closeInstallModal,
+        promptInstall,
+        canInstallPrompt,
+        isInstalled,
+        isIOS,
         toasts,
         addToast,
         removeToast
