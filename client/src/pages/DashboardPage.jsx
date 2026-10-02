@@ -15,9 +15,7 @@ import {
   ArrowRight,
   TrendingUp,
   Users,
-  Check,
-  Download,
-  Smartphone
+  Check
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -28,9 +26,7 @@ export default function DashboardPage() {
     activeMemberId,
     openAddExpense, 
     openUpiModal, 
-    addToast,
-    promptInstall,
-    isInstalled
+    addToast
   } = useApp();
 
   const [dashboardData, setDashboardData] = useState(null);
@@ -157,38 +153,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* Install Mobile App Banner (if not installed) */}
-      {!isInstalled && (
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-xs border border-indigo-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-indigo-600/80 border border-indigo-400/30 flex items-center justify-center text-white shrink-0 shadow-md shadow-indigo-900">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-sm sm:text-base text-white tracking-tight">
-                  Install FlatMatePay App
-                </h3>
-                <span className="px-2 py-0.5 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-indigo-200 text-[10px] font-extrabold uppercase tracking-wide">
-                  Mobile Ready
-                </span>
-              </div>
-              <p className="text-xs text-indigo-200/80 mt-0.5 max-w-xl">
-                Add FlatMatePay to your phone's home screen for fast 1-tap launch, full-screen view, and instant UPI settlements.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={promptInstall}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
-          >
-            <Download className="w-4 h-4 text-indigo-600" />
-            <span>Install App on Device</span>
-          </button>
-        </div>
-      )}
 
       {/* Clean Zero-State Alert if no expenses exist yet */}
       {!hasExpenses && (
