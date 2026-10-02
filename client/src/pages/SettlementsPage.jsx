@@ -10,16 +10,12 @@ import {
   Trash2, 
   Check, 
   ArrowRight,
-  Scale,
   X,
   SlidersHorizontal,
   ShieldCheck,
-  CreditCard,
   Banknote,
   Building,
-  AlertCircle,
   Edit2,
-  Info,
   Sparkles,
   Lock
 } from 'lucide-react';
@@ -506,7 +502,6 @@ export default function SettlementsPage() {
               const targetPerMember = hasBudget ? parseFloat(cat.monthly_budget_per_member) : 0;
               const totalBudget = hasBudget && cat.total_budget ? parseFloat(cat.total_budget) : 0;
               const totalSpent = parseFloat(cat.total_spent) || 0;
-              const budgetProgress = totalBudget > 0 ? Math.min(Math.round((totalSpent / totalBudget) * 100), 100) : 0;
               const hasTransfers = cat.equalization_transfers && cat.equalization_transfers.length > 0;
 
               return (

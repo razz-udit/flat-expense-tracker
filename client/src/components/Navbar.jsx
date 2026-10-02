@@ -12,15 +12,14 @@ import {
   LogIn,
   Menu,
   X,
-  Download,
-  Smartphone
+  Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { members, currentUser, logout, openAddExpense, promptInstall, isInstalled } = useApp();
+  const { members, currentUser, logout, openAddExpense, promptInstall } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [

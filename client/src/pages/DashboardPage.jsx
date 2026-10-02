@@ -16,7 +16,6 @@ import {
   TrendingUp,
   Users,
   Check,
-  SlidersHorizontal,
   Download,
   Smartphone
 } from 'lucide-react';
@@ -92,11 +91,8 @@ export default function DashboardPage() {
     current_month_name = 'Current Month',
     month_expenses_total = 0,
     viewer_paid = 0,
-    viewer_share = 0,
-    viewer_net_balance = 0,
     viewer_owes_to = [],
     viewer_receivable_from = [],
-    balances = [],
     suggested_settlements = [],
     recent_expenses = [],
     category_breakdown = []
