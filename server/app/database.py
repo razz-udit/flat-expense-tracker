@@ -8,8 +8,14 @@ logger = logging.getLogger("uvicorn.error")
 db_url = settings.sync_database_url
 
 def init_engine(url: str):
-    c_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=c_args, echo=False)
+    if url.startswith("sqlite"):
+        return create_engine(url, connect_args={"check_same_thread": False}, echo=False)
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        echo=False
+    )
 
 try:
     engine = init_engine(db_url)
