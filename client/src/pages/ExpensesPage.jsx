@@ -70,7 +70,7 @@ export default function ExpensesPage() {
     setEndDate('');
   };
 
-  const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
+  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
 
   const confirmDeleteExpense = async () => {
     if (!expenseToDelete) return;

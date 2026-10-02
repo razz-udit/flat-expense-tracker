@@ -165,8 +165,9 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     const generalKeywords = ['grocery', 'groceries', 'general', 'supplies', 'provisions', 'other', 'misc', 'food', 'market', 'vegetable', 'items'];
     return generalKeywords.some((k) => name.includes(k));
   };
-  const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
-  const canEdit = !editingExpense || (currentUser && (editingExpense.paid_by === currentUser.id || isDefaultAdmin));
+  const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
+  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
+  const canEdit = !editingExpense || Boolean(currentUser && (editingExpense.paid_by === currentUser.id || isDefaultAdmin));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
