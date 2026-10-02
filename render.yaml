@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: flat-payment-tracker
+    runtime: docker
+    region: singapore
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: APP_NAME
+        value: Flat Expense & Payment Manager
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

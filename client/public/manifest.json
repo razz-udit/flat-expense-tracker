@@ -1,0 +1,18 @@
+{
+  "name": "FlatMatePay - Flat Expense Manager",
+  "short_name": "FlatMatePay",
+  "description": "Personal Flat Expense & Payment Manager for 6 flat members",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
