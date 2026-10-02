@@ -766,7 +766,7 @@ export default function SettlementsPage() {
                   {paymentsHistory.map((p) => {
                     const isPayer = currentUser && currentUser.id === p.from_member;
                     const isReceiver = currentUser && currentUser.id === p.to_member;
-                    const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
+                    const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
                     const canVerify = isReceiver || isDefaultAdmin;
                     const canRevert = isReceiver || isDefaultAdmin;
                     const canDelete = isPayer || isReceiver || isDefaultAdmin;
