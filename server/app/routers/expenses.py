@@ -9,8 +9,38 @@ from app.models.expense import Expense, ExpenseSplit
 from app.models.member import Member
 from app.models.category import Category
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseOut
+from app.services.auth_service import verify_access_token
 
 router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
+
+def get_authenticated_member_id(
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    user_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+) -> int:
+    caller_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token_str = authorization.split("Bearer ", 1)[1].strip()
+        caller_id = verify_access_token(token_str)
+
+    if caller_id is None:
+        caller_id = user_id or x_user_id
+
+    if caller_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required: Please log in to modify or delete flat expenses."
+        )
+
+    member = db.query(Member).filter(Member.id == caller_id, Member.is_active == True).first()
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user session: Member not found or inactive."
+        )
+
+    return member.id
 
 def compute_equal_splits(amount: Decimal, member_ids: List[int]) -> List[tuple[int, Decimal]]:
     n = len(member_ids)
@@ -66,7 +96,30 @@ def get_expenses(
     return query.order_by(Expense.expense_date.desc(), Expense.id.desc()).offset(offset).limit(limit).all()
 
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
-def create_expense(data: ExpenseCreate, db: Session = Depends(get_db)):
+def create_expense(
+    data: ExpenseCreate, 
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    user_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    caller_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token_str = authorization.split("Bearer ", 1)[1].strip()
+        caller_id = verify_access_token(token_str)
+    if caller_id is None:
+        caller_id = user_id or x_user_id
+
+    if caller_id is not None and data.paid_by != caller_id:
+        caller_member = db.query(Member).filter(Member.id == caller_id).first()
+        target_member = db.query(Member).filter(Member.id == data.paid_by).first()
+        caller_name = caller_member.name if caller_member else f"Member {caller_id}"
+        target_name = target_member.name if target_member else f"Member {data.paid_by}"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: You are logged in as {caller_name}. You cannot record an expense paid by {target_name}. Only {target_name} can record expenses they paid."
+        )
+
     # Validate category and payer
     category = None
     if data.category_id:
@@ -175,8 +228,7 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)):
 def update_expense(
     expense_id: int, 
     data: ExpenseUpdate, 
-    user_id: Optional[int] = Query(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    caller_id: int = Depends(get_authenticated_member_id),
     db: Session = Depends(get_db)
 ):
     expense = db.query(Expense).options(
@@ -185,27 +237,17 @@ def update_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    caller_id = user_id or x_user_id
-    if caller_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User identity required: Please provide user_id or X-User-Id header to edit an expense."
-        )
-
-    first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-    admin_id = first_admin.id if first_admin else None
-
-    if caller_id != expense.paid_by and caller_id != admin_id:
+    if caller_id != expense.paid_by:
         payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: Only {payer_name} or the flat admin can edit this expense."
+            detail=f"Permission denied: You cannot edit this expense because it was paid by {payer_name}. Only {payer_name} can edit this expense."
         )
 
-    if data.paid_by is not None and data.paid_by != expense.paid_by and caller_id != admin_id:
+    if data.paid_by is not None and data.paid_by != expense.paid_by:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the flat admin can reassign an expense to a different payer."
+            detail="Permission denied: You cannot change the payer of an expense to another member."
         )
 
     new_amount = round(data.amount, 2) if data.amount is not None else expense.amount
@@ -288,8 +330,7 @@ def update_expense(
 @router.delete("/{expense_id}")
 def delete_expense(
     expense_id: int, 
-    user_id: Optional[int] = Query(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    caller_id: int = Depends(get_authenticated_member_id),
     db: Session = Depends(get_db)
 ):
     expense = db.query(Expense).options(
@@ -298,21 +339,11 @@ def delete_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    caller_id = user_id or x_user_id
-    if caller_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User identity required: Please provide user_id or X-User-Id header to delete an expense."
-        )
-
-    first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-    admin_id = first_admin.id if first_admin else None
-
-    if caller_id != expense.paid_by and caller_id != admin_id:
+    if caller_id != expense.paid_by:
         payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: Only {payer_name} or the flat admin can delete this expense."
+            detail=f"Permission denied: You cannot delete this expense because it was paid by {payer_name}. Only {payer_name} can delete this expense."
         )
 
     db.delete(expense)

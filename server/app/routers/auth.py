@@ -14,7 +14,7 @@ from app.schemas.auth import (
     AdminResetPasswordRequest
 )
 from app.schemas.member import MemberOut
-from app.services.auth_service import hash_password, verify_password
+from app.services.auth_service import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -77,7 +77,7 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
             existing.upi_id = clean_upi
         existing.password_hash = hash_password(pwd)
         db.commit()
-        token = secrets.token_hex(24)
+        token = create_access_token(existing.id)
         return LoginResponse(
             success=True,
             message=f"Welcome to the flat, {existing.name}! Your account has been registered.",
@@ -97,7 +97,7 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_member)
 
-    token = secrets.token_hex(24)
+    token = create_access_token(new_member.id)
     return LoginResponse(
         success=True,
         message=f"Welcome to the flat, {new_member.name}! Your account has been registered.",
@@ -121,7 +121,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not member.password_hash:
         member.password_hash = hash_password(pwd)
         db.commit()
-        token = secrets.token_hex(24)
+        token = create_access_token(member.id)
         return LoginResponse(
             success=True,
             message=f"Welcome, {member.name}! Your account password has been set.",
@@ -137,7 +137,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         )
 
     # Generate session token
-    token = secrets.token_hex(24)
+    token = create_access_token(member.id)
 
     return LoginResponse(
         success=True,
@@ -163,7 +163,7 @@ def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
 
     member.password_hash = hash_password(data.new_password.strip())
     db.commit()
-    token = secrets.token_hex(24)
+    token = create_access_token(member.id)
 
     return LoginResponse(
         success=True,

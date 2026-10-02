@@ -295,26 +295,44 @@ def test_expense_authorization_and_ownership(client):
     assert payer_update.status_code == 200
     assert payer_update.json()["description"] == "Vegetables, fruits and milk"
 
-    # 6. Flat Admin (Member 1) editing the expense should succeed
-    admin_update = client.put(
+    # 6. No other member (even Member 1) can edit Member 2's expense (fails with 403 Forbidden)
+    other_member_update = client.put(
         f"/api/expenses/{expense_id}?user_id={admin_user['id']}",
-        json={"notes": "Audited by flat admin"}
+        json={"notes": "Member 1 attempting to edit"}
     )
-    assert admin_update.status_code == 200
-    assert admin_update.json()["notes"] == "Audited by flat admin"
+    assert other_member_update.status_code == 403
+    assert "Permission denied" in other_member_update.json()["detail"]
 
-    # 7. Non-admin attempting to reassign payer should fail with 403
+    # 7. Bearer token authentication works for payer
+    from app.services.auth_service import create_access_token
+    payer_token = create_access_token(payer_user["id"])
+    token_update = client.put(
+        f"/api/expenses/{expense_id}",
+        headers={"Authorization": f"Bearer {payer_token}"},
+        json={"description": "Vegetables, fruits and almond milk"}
+    )
+    assert token_update.status_code == 200
+    assert token_update.json()["description"] == "Vegetables, fruits and almond milk"
+
+    # 8. Attempting to reassign payer should fail with 403
     reassign_attempt = client.put(
         f"/api/expenses/{expense_id}?user_id={payer_user['id']}",
         json={"paid_by": other_user["id"]}
     )
     assert reassign_attempt.status_code == 403
-    assert "reassign" in reassign_attempt.json()["detail"].lower()
+    assert "cannot change the payer" in reassign_attempt.json()["detail"].lower()
 
-    # 8. Payer (Member 2) deleting their own expense should succeed
+    # 9. Other member attempting to delete Member 2's expense must fail
+    other_delete = client.delete(
+        f"/api/expenses/{expense_id}?user_id={admin_user['id']}"
+    )
+    assert other_delete.status_code == 403
+    assert "Permission denied" in other_delete.json()["detail"]
+
+    # 10. Payer (Member 2) deleting their own expense should succeed
     payer_delete = client.delete(
         f"/api/expenses/{expense_id}",
-        headers={"X-User-Id": str(payer_user["id"])}
+        headers={"Authorization": f"Bearer {payer_token}"}
     )
     assert payer_delete.status_code == 200
     assert payer_delete.json()["message"] == "Expense deleted successfully"

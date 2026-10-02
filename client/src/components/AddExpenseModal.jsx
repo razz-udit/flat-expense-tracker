@@ -166,8 +166,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     return generalKeywords.some((k) => name.includes(k));
   };
   const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
-  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
-  const canEdit = !editingExpense || Boolean(currentUser && (editingExpense.paid_by === currentUser.id || isDefaultAdmin));
+  const canEdit = !editingExpense || Boolean(currentUser && editingExpense.paid_by === currentUser.id);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -175,7 +174,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
     if (editingExpense && !canEdit) {
       setValidationError(
-        `Permission denied: Only ${editingExpense.payer?.name || 'the payer'} or Flat Admin can edit this expense.`
+        `Permission denied: You cannot edit this expense because it was paid by ${editingExpense.payer?.name || 'another member'}. Only the payer can edit their own expense.`
       );
       return;
     }
@@ -409,10 +408,10 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               <select
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
-                disabled={Boolean(editingExpense && !isDefaultAdmin)}
+                disabled={Boolean(editingExpense || currentUser)}
                 required
                 className={`w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 ${
-                  editingExpense && !isDefaultAdmin ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                  editingExpense || currentUser ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-white'
                 }`}
               >
                 {members.map((m) => (
@@ -421,9 +420,11 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   </option>
                 ))}
               </select>
-              {editingExpense && !isDefaultAdmin && (
-                <p className="text-[10px] text-slate-400 mt-1">Only Flat Admin can reassign the payer of a saved expense.</p>
-              )}
+              {editingExpense ? (
+                <p className="text-[10px] text-slate-400 mt-1">The payer of a recorded expense cannot be reassigned.</p>
+              ) : currentUser ? (
+                <p className="text-[10px] text-slate-400 mt-1">Logged in as {currentUser.name}. You are recording this expense as payer.</p>
+              ) : null}
             </div>
 
             <div>
