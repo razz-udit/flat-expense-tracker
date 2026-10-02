@@ -33,11 +33,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS setup
+# CORS setup dynamically configured from .env / environment settings
+cors_origins = settings.cors_origins_list
+has_wildcard = "*" in cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow local frontend
-    allow_credentials=True,
+    allow_origins=["*"] if has_wildcard else cors_origins,
+    allow_origin_regex=r"https://.*\.loca\.lt" if not has_wildcard else None,
+    allow_credentials=not has_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )
