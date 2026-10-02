@@ -11,15 +11,14 @@ import {
   LogOut,
   LogIn,
   Menu,
-  X,
-  Download
+  X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { members, currentUser, logout, openAddExpense, promptInstall } = useApp();
+  const { members, currentUser, logout, openAddExpense } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -86,16 +85,6 @@ export default function Navbar() {
 
           {/* Right Action Area */}
           <div className="hidden sm:flex items-center gap-2.5">
-            {/* Install App button */}
-            <button
-              onClick={promptInstall}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all active:scale-95 cursor-pointer shadow-2xs"
-              title="Install FlatMatePay App"
-            >
-              <Download className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Install App</span>
-            </button>
-
             {/* Quick Add Expense button */}
             <button
               onClick={() => openAddExpense()}
@@ -140,14 +129,6 @@ export default function Navbar() {
 
           {/* Mobile header controls */}
           <div className="flex md:hidden items-center gap-1.5">
-            <button
-              onClick={promptInstall}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg cursor-pointer"
-              title="Install App"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Install</span>
-            </button>
             <button
               onClick={() => openAddExpense()}
               className="p-1.5 text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
@@ -223,20 +204,6 @@ export default function Navbar() {
                 </Link>
               );
             })}
-          </div>
-
-          {/* Mobile Install App Button */}
-          <div className="pt-2 border-t border-slate-100">
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                promptInstall();
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-200 shadow-2xs active:scale-98 transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-indigo-600" />
-              <span>Install FlatMatePay Mobile App</span>
-            </button>
           </div>
         </div>
       )}
