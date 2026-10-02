@@ -11,11 +11,12 @@ import {
   CalendarRange, 
   Users, 
   ChevronDown, 
-  ChevronUp
+  ChevronUp,
+  Lock
 } from 'lucide-react';
 
 export default function ExpensesPage() {
-  const { members, categories, openAddExpense, addToast } = useApp();
+  const { members, categories, currentUser, openAddExpense, addToast } = useApp();
 
   const [expenses, setExpenses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,11 +70,19 @@ export default function ExpensesPage() {
     setEndDate('');
   };
 
+  const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
+
   const confirmDeleteExpense = async () => {
     if (!expenseToDelete) return;
+    const canDelete = currentUser && (expenseToDelete.paid_by === currentUser.id || isDefaultAdmin);
+    if (!canDelete) {
+      addToast('Permission denied: Only the flatmate who paid for this expense or flat admin can delete it.', 'error');
+      setExpenseToDelete(null);
+      return;
+    }
     try {
       setIsDeleting(true);
-      await api.deleteExpense(expenseToDelete.id);
+      await api.deleteExpense(expenseToDelete.id, currentUser?.id);
       addToast('Expense deleted successfully. Balances recalculated.', 'success');
       setExpenseToDelete(null);
       fetchExpenses();
@@ -245,6 +254,8 @@ export default function ExpensesPage() {
               <tbody className="divide-y divide-slate-100">
                 {expenses.map((exp) => {
                   const isExpanded = expandedExpenseId === exp.id;
+                  const isPayer = currentUser && exp.paid_by === currentUser.id;
+                  const canModify = isPayer || isDefaultAdmin;
                   return (
                     <React.Fragment key={exp.id}>
                       <tr className="hover:bg-slate-50/80 transition-colors">
@@ -281,6 +292,11 @@ export default function ExpensesPage() {
                         {/* Paid By */}
                         <td className="py-3 px-4 font-semibold text-slate-800 whitespace-nowrap">
                           {exp.payer?.name || `Member ${exp.paid_by}`}
+                          {isPayer && (
+                            <span className="ml-1.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                              You
+                            </span>
+                          )}
                         </td>
 
                         {/* Split Count & Type */}
@@ -297,22 +313,34 @@ export default function ExpensesPage() {
 
                         {/* Actions */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => openAddExpense(exp)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-                              title="Edit Expense"
+                          {canModify ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => openAddExpense(exp)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                title="Edit Expense"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setExpenseToDelete(exp)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Delete Expense"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              className="flex items-center justify-end"
+                              title={`Locked: Recorded by ${exp.payer?.name || `Member ${exp.paid_by}`}. Only they or Flat Admin can modify.`}
                             >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setExpenseToDelete(exp)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Delete Expense"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-400 text-[11px] font-semibold border border-slate-200/60 cursor-not-allowed">
+                                <Lock className="w-3 h-3 text-slate-400" />
+                                <span>Locked</span>
+                              </span>
+                            </div>
+                          )}
                         </td>
                       </tr>
 
@@ -361,7 +389,7 @@ export default function ExpensesPage() {
             <h3 className="font-bold text-base text-slate-900">Delete Expense?</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
               Are you sure you want to delete <span className="font-bold">"{expenseToDelete.description}"</span> (
-              {formatCurrency(expenseToDelete.amount)})? This will remove all associated member splits and
+              {formatCurrency(expenseToDelete.amount)}) paid by <span className="font-semibold text-slate-900">{expenseToDelete.payer?.name || `Member ${expenseToDelete.paid_by}`}</span>? This will remove all associated member splits and
               automatically recalculate the balances for all flat members.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2">

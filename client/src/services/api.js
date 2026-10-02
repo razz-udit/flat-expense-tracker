@@ -1,9 +1,17 @@
 const API_BASE = '/api';
 
+function getActiveUserId() {
+  if (typeof window === 'undefined') return null;
+  const saved = localStorage.getItem('flat_current_user_id') || localStorage.getItem('flat_active_member_id');
+  return saved ? parseInt(saved, 10) : null;
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const activeUserId = getActiveUserId();
   const headers = {
     'Content-Type': 'application/json',
+    ...(activeUserId ? { 'X-User-Id': String(activeUserId) } : {}),
     ...options.headers,
   };
 
@@ -63,8 +71,16 @@ export const api = {
   },
   getExpense: (id) => request(`/expenses/${id}`),
   createExpense: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
-  updateExpense: (id, data) => request(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteExpense: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
+  updateExpense: (id, data, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/expenses/${id}${qs}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deleteExpense: (id, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/expenses/${id}${qs}`, { method: 'DELETE' });
+  },
 
   // Payments / Settlements
   getPayments: (params = {}) => {
@@ -78,9 +94,21 @@ export const api = {
     return request(`/payments${qs ? `?${qs}` : ''}`);
   },
   createPayment: (data) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
-  updatePayment: (id, data) => request(`/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deletePayment: (id) => request(`/payments/${id}`, { method: 'DELETE' }),
-  verifyPayment: (id) => request(`/payments/${id}/verify`, { method: 'POST' }),
+  updatePayment: (id, data, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/payments/${id}${qs}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deletePayment: (id, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/payments/${id}${qs}`, { method: 'DELETE' });
+  },
+  verifyPayment: (id, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/payments/${id}/verify${qs}`, { method: 'POST' });
+  },
 
   // Recurring
   getRecurring: () => request('/recurring'),
