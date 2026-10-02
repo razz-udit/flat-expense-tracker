@@ -4,13 +4,8 @@ import { useApp } from '../context/AppContext';
 import { 
   CalendarClock, 
   ChevronRight, 
-  Calendar, 
   PieChart, 
-  Users, 
-  Receipt, 
-  ArrowLeft,
-  CalendarRange,
-  Building2
+  Receipt
 } from 'lucide-react';
 
 export default function MonthlyHistoryPage() {

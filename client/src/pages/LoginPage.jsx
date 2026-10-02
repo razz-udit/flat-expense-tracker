@@ -11,7 +11,6 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  ShieldCheck,
   UserPlus,
   Sparkles,
   Download,

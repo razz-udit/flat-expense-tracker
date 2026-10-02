@@ -6,8 +6,7 @@ import {
   PlusSquare, 
   CheckCircle2, 
   X, 
-  Sparkles, 
-  ExternalLink 
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 

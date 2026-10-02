@@ -10,9 +10,7 @@ import {
   CheckCircle2, 
   Smartphone, 
   Banknote, 
-  Building,
-  ShieldCheck,
-  ChevronDown
+  Building
 } from 'lucide-react';
 
 export default function UpiPayModal({ onPaymentDone }) {
