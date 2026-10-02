@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Edit2,
   Info,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-react';
 
 export default function SettlementsPage() {
@@ -167,7 +168,7 @@ export default function SettlementsPage() {
 
   const handleVerifyPayment = async (paymentId) => {
     try {
-      await api.verifyPayment(paymentId);
+      await api.verifyPayment(paymentId, currentUser?.id);
       addToast('Settlement verified and confirmed as received!', 'success');
       fetchSettlementData();
     } catch (err) {
@@ -178,7 +179,7 @@ export default function SettlementsPage() {
 
   const handleUpdatePaymentStatus = async (paymentId, newStatus) => {
     try {
-      await api.updatePayment(paymentId, { status: newStatus });
+      await api.updatePayment(paymentId, { status: newStatus }, currentUser?.id);
       addToast(`Payment marked as ${newStatus}! Balances recalculated.`, 'success');
       fetchSettlementData();
     } catch (err) {
@@ -189,7 +190,7 @@ export default function SettlementsPage() {
 
   const handleDeletePayment = async (paymentId) => {
     try {
-      await api.deletePayment(paymentId);
+      await api.deletePayment(paymentId, currentUser?.id);
       addToast('Payment record removed. Balances recalculated.', 'success');
       fetchSettlementData();
     } catch (err) {
@@ -763,7 +764,12 @@ export default function SettlementsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paymentsHistory.map((p) => {
-                    const isCurrentUserReceiver = currentUser && currentUser.id === p.to_member;
+                    const isPayer = currentUser && currentUser.id === p.from_member;
+                    const isReceiver = currentUser && currentUser.id === p.to_member;
+                    const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
+                    const canVerify = isReceiver || isDefaultAdmin;
+                    const canRevert = isReceiver || isDefaultAdmin;
+                    const canDelete = isPayer || isReceiver || isDefaultAdmin;
                     return (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4 text-slate-600 font-medium whitespace-nowrap">
@@ -827,30 +833,46 @@ export default function SettlementsPage() {
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {p.status === 'Pending' ? (
+                              canVerify ? (
+                                <button
+                                  onClick={() => handleVerifyPayment(p.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                  title="Confirm you received this payment"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Verify</span>
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 italic" title="Only the receiving roommate or admin can confirm receipt">
+                                  Awaiting receiver
+                                </span>
+                              )
+                            ) : (
+                              canRevert && (
+                                <button
+                                  onClick={() => handleUpdatePaymentStatus(p.id, 'Pending')}
+                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold cursor-pointer"
+                                  title="Revert to Pending"
+                                >
+                                  Revert
+                                </button>
+                              )
+                            )}
+                            {canDelete ? (
                               <button
-                                onClick={() => handleVerifyPayment(p.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                                title="Confirm you received this payment"
+                                onClick={() => handleDeletePayment(p.id)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                title="Delete Record"
                               >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Verify</span>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleUpdatePaymentStatus(p.id, 'Pending')}
-                                className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold cursor-pointer"
-                                title="Revert to Pending"
-                              >
-                                Revert
-                              </button>
+                              !canVerify && (
+                                <span className="p-1 text-slate-300" title="Locked: You are not a party in this payment">
+                                  <Lock className="w-3.5 h-3.5 inline" />
+                                </span>
+                              )
                             )}
-                            <button
-                              onClick={() => handleDeletePayment(p.id)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                              title="Delete Record"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         </td>
                       </tr>

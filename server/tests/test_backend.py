@@ -244,3 +244,78 @@ def test_monthly_history_and_billing_period(client):
     assert detail["total_amount"] == "7800.00"
     assert len(detail["categories"]) == 1
     assert detail["categories"][0]["category_name"] == "Electricity"
+
+def test_expense_authorization_and_ownership(client):
+    members = client.get("/api/members").json()
+    admin_user = members[0] # Member 1 is flat admin
+    payer_user = members[1] # Member 2 is payer
+    other_user = members[2] # Member 3 is unrelated roommate
+
+    # 1. Member 2 creates an expense
+    create_payload = {
+        "category_name": "Grocery",
+        "amount": 900.00,
+        "paid_by": payer_user["id"],
+        "description": "Vegetables and fruits",
+        "expense_date": "2026-09-28",
+        "split_type": "equal",
+        "member_ids": [members[0]["id"], members[1]["id"], members[2]["id"]]
+    }
+    create_res = client.post("/api/expenses", json=create_payload)
+    assert create_res.status_code == 201
+    expense_id = create_res.json()["id"]
+
+    # 2. Anonymous request without user ID should be rejected with 401
+    anon_update = client.put(f"/api/expenses/{expense_id}", json={"description": "Hacked description"})
+    assert anon_update.status_code == 401
+
+    anon_delete = client.delete(f"/api/expenses/{expense_id}")
+    assert anon_delete.status_code == 401
+
+    # 3. Unrelated roommate (Member 3) attempting to edit Member 2's expense should fail with 403 Forbidden
+    unauth_update = client.put(
+        f"/api/expenses/{expense_id}?user_id={other_user['id']}",
+        json={"description": "Member 3 modified this"}
+    )
+    assert unauth_update.status_code == 403
+    assert "Permission denied" in unauth_update.json()["detail"]
+
+    # 4. Unrelated roommate attempting to delete Member 2's expense should fail with 403 Forbidden
+    unauth_delete = client.delete(
+        f"/api/expenses/{expense_id}?user_id={other_user['id']}"
+    )
+    assert unauth_delete.status_code == 403
+    assert "Permission denied" in unauth_delete.json()["detail"]
+
+    # 5. Payer (Member 2) editing their own expense should succeed
+    payer_update = client.put(
+        f"/api/expenses/{expense_id}?user_id={payer_user['id']}",
+        json={"description": "Vegetables, fruits and milk"}
+    )
+    assert payer_update.status_code == 200
+    assert payer_update.json()["description"] == "Vegetables, fruits and milk"
+
+    # 6. Flat Admin (Member 1) editing the expense should succeed
+    admin_update = client.put(
+        f"/api/expenses/{expense_id}?user_id={admin_user['id']}",
+        json={"notes": "Audited by flat admin"}
+    )
+    assert admin_update.status_code == 200
+    assert admin_update.json()["notes"] == "Audited by flat admin"
+
+    # 7. Non-admin attempting to reassign payer should fail with 403
+    reassign_attempt = client.put(
+        f"/api/expenses/{expense_id}?user_id={payer_user['id']}",
+        json={"paid_by": other_user["id"]}
+    )
+    assert reassign_attempt.status_code == 403
+    assert "reassign" in reassign_attempt.json()["detail"].lower()
+
+    # 8. Payer (Member 2) deleting their own expense should succeed
+    payer_delete = client.delete(
+        f"/api/expenses/{expense_id}",
+        headers={"X-User-Id": str(payer_user["id"])}
+    )
+    assert payer_delete.status_code == 200
+    assert payer_delete.json()["message"] == "Expense deleted successfully"
+

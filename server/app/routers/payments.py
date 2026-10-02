@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.payment import Payment
@@ -79,13 +79,29 @@ def get_payment(payment_id: int, db: Session = Depends(get_db)):
     return attach_upi_link(payment)
 
 @router.put("/{payment_id}", response_model=PaymentOut)
-def update_payment(payment_id: int, data: PaymentUpdate, db: Session = Depends(get_db)):
+def update_payment(
+    payment_id: int, 
+    data: PaymentUpdate, 
+    user_id: Optional[int] = Query(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     payment = db.query(Payment).options(
         joinedload(Payment.payer),
         joinedload(Payment.receiver)
     ).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
+
+    caller_id = user_id or x_user_id
+    if caller_id is not None:
+        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+        admin_id = first_admin.id if first_admin else None
+        if caller_id != payment.from_member and caller_id != payment.to_member and caller_id != admin_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied: Only the sender, receiver, or flat admin can modify this payment."
+            )
 
     if data.status is not None:
         payment.status = data.status
@@ -107,13 +123,29 @@ def update_payment(payment_id: int, data: PaymentUpdate, db: Session = Depends(g
     return attach_upi_link(payment)
 
 @router.post("/{payment_id}/verify", response_model=PaymentOut)
-def verify_payment(payment_id: int, db: Session = Depends(get_db)):
+def verify_payment(
+    payment_id: int, 
+    user_id: Optional[int] = Query(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     payment = db.query(Payment).options(
         joinedload(Payment.payer),
         joinedload(Payment.receiver)
     ).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
+
+    caller_id = user_id or x_user_id
+    if caller_id is not None:
+        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+        admin_id = first_admin.id if first_admin else None
+        if caller_id != payment.to_member and caller_id != admin_id:
+            receiver_name = payment.receiver.name if payment.receiver else f"Member {payment.to_member}"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: Only {receiver_name} (the receiver) or flat admin can verify this settlement."
+            )
 
     payment.status = "Paid"
     payment.verified_at = datetime.now()
@@ -122,10 +154,26 @@ def verify_payment(payment_id: int, db: Session = Depends(get_db)):
     return attach_upi_link(payment)
 
 @router.delete("/{payment_id}")
-def delete_payment(payment_id: int, db: Session = Depends(get_db)):
+def delete_payment(
+    payment_id: int, 
+    user_id: Optional[int] = Query(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
+
+    caller_id = user_id or x_user_id
+    if caller_id is not None:
+        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+        admin_id = first_admin.id if first_admin else None
+        if caller_id != payment.from_member and caller_id != payment.to_member and caller_id != admin_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied: Only the sender, receiver, or flat admin can delete this payment record."
+            )
+
     db.delete(payment)
     db.commit()
     return {"message": "Payment record deleted successfully"}

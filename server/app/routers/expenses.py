@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import extract
 from app.database import get_db
@@ -172,10 +172,41 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)):
     return expense
 
 @router.put("/{expense_id}", response_model=ExpenseOut)
-def update_expense(expense_id: int, data: ExpenseUpdate, db: Session = Depends(get_db)):
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+def update_expense(
+    expense_id: int, 
+    data: ExpenseUpdate, 
+    user_id: Optional[int] = Query(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).options(
+        joinedload(Expense.payer)
+    ).filter(Expense.id == expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
+
+    caller_id = user_id or x_user_id
+    if caller_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User identity required: Please provide user_id or X-User-Id header to edit an expense."
+        )
+
+    first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+    admin_id = first_admin.id if first_admin else None
+
+    if caller_id != expense.paid_by and caller_id != admin_id:
+        payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: Only {payer_name} or the flat admin can edit this expense."
+        )
+
+    if data.paid_by is not None and data.paid_by != expense.paid_by and caller_id != admin_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the flat admin can reassign an expense to a different payer."
+        )
 
     new_amount = round(data.amount, 2) if data.amount is not None else expense.amount
     new_split_type = data.split_type if data.split_type is not None else expense.split_type
@@ -255,10 +286,35 @@ def update_expense(expense_id: int, data: ExpenseUpdate, db: Session = Depends(g
     return expense
 
 @router.delete("/{expense_id}")
-def delete_expense(expense_id: int, db: Session = Depends(get_db)):
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+def delete_expense(
+    expense_id: int, 
+    user_id: Optional[int] = Query(None),
+    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).options(
+        joinedload(Expense.payer)
+    ).filter(Expense.id == expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
+
+    caller_id = user_id or x_user_id
+    if caller_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User identity required: Please provide user_id or X-User-Id header to delete an expense."
+        )
+
+    first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+    admin_id = first_admin.id if first_admin else None
+
+    if caller_id != expense.paid_by and caller_id != admin_id:
+        payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: Only {payer_name} or the flat admin can delete this expense."
+        )
+
     db.delete(expense)
     db.commit()
     return {"message": "Expense deleted successfully"}

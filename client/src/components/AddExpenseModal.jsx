@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { X, AlertCircle, Check, Users, Receipt, CalendarRange } from 'lucide-react';
+import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock } from 'lucide-react';
 
 export default function AddExpenseModal({ onExpenseSaved }) {
   const {
     members,
     categories,
+    currentUser,
     activeMemberId,
     isExpenseModalOpen,
     editingExpense,
@@ -164,11 +165,19 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     const generalKeywords = ['grocery', 'groceries', 'general', 'supplies', 'provisions', 'other', 'misc', 'food', 'market', 'vegetable', 'items'];
     return generalKeywords.some((k) => name.includes(k));
   };
-  const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
+  const isDefaultAdmin = currentUser && members.length > 0 && currentUser.id === members[0].id;
+  const canEdit = !editingExpense || (currentUser && (editingExpense.paid_by === currentUser.id || isDefaultAdmin));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setValidationError('');
+
+    if (editingExpense && !canEdit) {
+      setValidationError(
+        `Permission denied: Only ${editingExpense.payer?.name || 'the payer'} or Flat Admin can edit this expense.`
+      );
+      return;
+    }
 
     if (parsedAmount <= 0) {
       setValidationError('Please enter a valid expense amount greater than 0.');
@@ -250,7 +259,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     try {
       setIsSubmitting(true);
       if (editingExpense) {
-        await api.updateExpense(editingExpense.id, payload);
+        await api.updateExpense(editingExpense.id, payload, currentUser?.id);
         addToast('Expense updated successfully!', 'success');
       } else {
         await api.createExpense(payload);
@@ -291,6 +300,17 @@ export default function AddExpenseModal({ onExpenseSaved }) {
           <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <span>{validationError}</span>
+          </div>
+        )}
+
+        {/* Read-Only Mode Banner */}
+        {editingExpense && !canEdit && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Read-Only Mode:</strong> This expense was recorded by{' '}
+              <strong>{editingExpense.payer?.name || `Member ${editingExpense.paid_by}`}</strong>. Only they or the Flat Admin can edit or delete it.
+            </span>
           </div>
         )}
 
@@ -388,8 +408,11 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               <select
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
+                disabled={Boolean(editingExpense && !isDefaultAdmin)}
                 required
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
+                className={`w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 ${
+                  editingExpense && !isDefaultAdmin ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                }`}
               >
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -397,6 +420,9 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   </option>
                 ))}
               </select>
+              {editingExpense && !isDefaultAdmin && (
+                <p className="text-[10px] text-slate-400 mt-1">Only Flat Admin can reassign the payer of a saved expense.</p>
+              )}
             </div>
 
             <div>
@@ -625,10 +651,14 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              disabled={isSubmitting || (editingExpense && !canEdit)}
+              className={`px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer ${
+                editingExpense && !canEdit
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50'
+              }`}
             >
-              {isSubmitting ? 'Saving...' : editingExpense ? 'Update Expense' : 'Save Expense'}
+              {isSubmitting ? 'Saving...' : editingExpense ? (canEdit ? 'Update Expense' : 'Read Only') : 'Save Expense'}
             </button>
           </div>
         </form>
