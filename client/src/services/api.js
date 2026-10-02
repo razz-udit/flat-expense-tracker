@@ -6,12 +6,19 @@ function getActiveUserId() {
   return saved ? parseInt(saved, 10) : null;
 }
 
+function getAuthToken() {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('flat_auth_token') || null;
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const activeUserId = getActiveUserId();
+  const authToken = getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
     ...(activeUserId ? { 'X-User-Id': String(activeUserId) } : {}),
+    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
     ...options.headers,
   };
 

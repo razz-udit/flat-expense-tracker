@@ -70,13 +70,11 @@ export default function ExpensesPage() {
     setEndDate('');
   };
 
-  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
-
   const confirmDeleteExpense = async () => {
     if (!expenseToDelete) return;
-    const canDelete = currentUser && (expenseToDelete.paid_by === currentUser.id || isDefaultAdmin);
+    const canDelete = currentUser && expenseToDelete.paid_by === currentUser.id;
     if (!canDelete) {
-      addToast('Permission denied: Only the flatmate who paid for this expense or flat admin can delete it.', 'error');
+      addToast('Permission denied: You can only delete expenses that you personally paid for.', 'error');
       setExpenseToDelete(null);
       return;
     }
@@ -254,8 +252,8 @@ export default function ExpensesPage() {
               <tbody className="divide-y divide-slate-100">
                 {expenses.map((exp) => {
                   const isExpanded = expandedExpenseId === exp.id;
-                  const isPayer = currentUser && exp.paid_by === currentUser.id;
-                  const canModify = isPayer || isDefaultAdmin;
+                  const isPayer = Boolean(currentUser && exp.paid_by === currentUser.id);
+                  const canModify = isPayer;
                   return (
                     <React.Fragment key={exp.id}>
                       <tr className="hover:bg-slate-50/80 transition-colors">
@@ -333,7 +331,7 @@ export default function ExpensesPage() {
                           ) : (
                             <div
                               className="flex items-center justify-end"
-                              title={`Locked: Recorded by ${exp.payer?.name || `Member ${exp.paid_by}`}. Only they or Flat Admin can modify.`}
+                              title={`Locked: Recorded by ${exp.payer?.name || `Member ${exp.paid_by}`}. Only the payer can edit or delete this expense.`}
                             >
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-400 text-[11px] font-semibold border border-slate-200/60 cursor-not-allowed">
                                 <Lock className="w-3 h-3 text-slate-400" />
