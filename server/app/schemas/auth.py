@@ -13,11 +13,8 @@ class SignUpRequest(BaseModel):
     password: Optional[str] = Field(None, max_length=100)
 
 class GoogleAuthRequest(BaseModel):
-    credential: Optional[str] = Field(None, description="Google ID Token JWT")
-    email: Optional[str] = Field(None, description="Google account email")
-    name: Optional[str] = Field(None, description="Google account name")
-    avatar_url: Optional[str] = Field(None, description="Google avatar picture URL")
-    google_id: Optional[str] = Field(None, description="Google sub / user ID")
+    credential: Optional[str] = Field(None, description="Google ID Token JWT from Google Identity Services")
+    access_token: Optional[str] = Field(None, description="Google OAuth 2.0 Access Token")
     upi_id: Optional[str] = Field(None, description="UPI ID for flat settlements")
 
 class LoginResponse(BaseModel):

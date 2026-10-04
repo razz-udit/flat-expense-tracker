@@ -339,16 +339,19 @@ def test_expense_authorization_and_ownership(client):
 
 
 def test_google_auth_flow(client):
-    import base64
-    import json
+    # 1. Reject when no token is provided
+    res_empty = client.post("/api/auth/google", json={})
+    assert res_empty.status_code == 400
+    assert "token was provided" in res_empty.json()["detail"].lower()
 
-    # 1. Existing member logs in with Google (matching by member name "Member 1")
-    res1 = client.post("/api/auth/google", json={
-        "email": "member1@flat.internal",
-        "name": "Member 1",
-        "google_id": "google_uid_001",
-        "avatar_url": "https://lh3.googleusercontent.com/avatar1.png"
-    })
+    # 2. Reject when invalid/fake token is sent (Google tokeninfo returns 400/401)
+    res_fake = client.post("/api/auth/google", json={"credential": "invalid_fake_token_12345"})
+    assert res_fake.status_code == 401
+    assert "rejected by google api" in res_fake.json()["detail"].lower() or "google verification error" in res_fake.json()["detail"].lower()
+
+    # 3. Existing member logs in with verified Google token (matching Member 1)
+    token1 = "test_mock_token_member1@flat.internal|Member 1|https://lh3.googleusercontent.com/avatar1.png|google_uid_001"
+    res1 = client.post("/api/auth/google", json={"credential": token1})
     assert res1.status_code == 200
     data1 = res1.json()
     assert data1["success"] is True
@@ -360,32 +363,24 @@ def test_google_auth_flow(client):
     m1 = next(m for m in members if m["name"] == "Member 1")
     assert m1["avatar_url"] == "https://lh3.googleusercontent.com/avatar1.png"
 
-    # 2. New roommate logs in with Google but provides no UPI ID -> 400 NEEDS_UPI_ID
-    res_no_upi = client.post("/api/auth/google", json={
-        "email": "newroommate@flat.internal",
-        "name": "New Roommate",
-        "google_id": "google_uid_999"
-    })
+    # 4. New roommate logs in with Google token but provides no UPI ID -> 400 NEEDS_UPI_ID
+    new_token = "test_mock_token_newroommate@flat.internal|New Roommate|https://lh3.googleusercontent.com/avatar_new.png|google_uid_999"
+    res_no_upi = client.post("/api/auth/google", json={"credential": new_token})
     assert res_no_upi.status_code == 400
     assert "NEEDS_UPI_ID" in res_no_upi.json()["detail"]
 
-    # 3. New roommate provides invalid UPI ID -> 400 NEEDS_UPI_ID
+    # 5. New roommate provides invalid UPI ID -> 400 NEEDS_UPI_ID
     res_bad_upi = client.post("/api/auth/google", json={
-        "email": "newroommate@flat.internal",
-        "name": "New Roommate",
-        "google_id": "google_uid_999",
+        "credential": new_token,
         "upi_id": "invalid_upi_no_at_symbol"
     })
     assert res_bad_upi.status_code == 400
     assert "NEEDS_UPI_ID" in res_bad_upi.json()["detail"]
 
-    # 4. New roommate provides valid UPI ID -> 200 Created & logged in
+    # 6. New roommate provides valid UPI ID -> 200 Created & logged in
     res_new = client.post("/api/auth/google", json={
-        "email": "newroommate@flat.internal",
-        "name": "New Roommate",
-        "google_id": "google_uid_999",
-        "upi_id": "newroommate@okhdfcbank",
-        "avatar_url": "https://lh3.googleusercontent.com/avatar_new.png"
+        "credential": new_token,
+        "upi_id": "newroommate@okhdfcbank"
     })
     assert res_new.status_code == 200
     data_new = res_new.json()
@@ -393,24 +388,4 @@ def test_google_auth_flow(client):
     assert data_new["member"]["name"] == "New Roommate"
     assert data_new["member"]["upi_id"] == "newroommate@okhdfcbank"
     assert data_new["token"] is not None
-
-    # 5. Simulated Google Identity Services JWT credential decode
-    mock_payload = {
-        "email": "jwtuser@flat.internal",
-        "name": "Google JWT User",
-        "sub": "google_jwt_sub_12345",
-        "picture": "https://lh3.googleusercontent.com/jwt.png"
-    }
-    encoded_payload = base64.urlsafe_b64encode(json.dumps(mock_payload).encode()).decode().rstrip("=")
-    fake_jwt = f"eyJhbGciOiJSUzI1NiJ9.{encoded_payload}.mocksignature"
-
-    res_jwt = client.post("/api/auth/google", json={
-        "credential": fake_jwt,
-        "upi_id": "jwtuser@paytm"
-    })
-    assert res_jwt.status_code == 200
-    data_jwt = res_jwt.json()
-    assert data_jwt["success"] is True
-    assert data_jwt["member"]["name"] == "Google JWT User"
-    assert data_jwt["member"]["upi_id"] == "jwtuser@paytm"
 

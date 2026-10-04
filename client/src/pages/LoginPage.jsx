@@ -11,8 +11,8 @@ import {
   Sparkles, 
   Download, 
   Smartphone,
-  Mail,
-  User
+  Settings,
+  ExternalLink
 } from 'lucide-react';
 
 function GoogleLogo({ className = "w-5 h-5" }) {
@@ -49,14 +49,14 @@ export default function LoginPage() {
   const [pendingGoogleData, setPendingGoogleData] = useState(null);
   const [upiInput, setUpiInput] = useState('');
 
-  // Fallback Google Sign-In state (when VITE_GOOGLE_CLIENT_ID is not configured)
-  const [showManualGoogleModal, setShowManualGoogleModal] = useState(false);
-  const [manualGoogleEmail, setManualGoogleEmail] = useState('');
-  const [manualGoogleName, setManualGoogleName] = useState('');
-  const [manualGoogleUpi, setManualGoogleUpi] = useState('');
+  // Google OAuth Client ID state
+  const [googleClientId, setGoogleClientId] = useState(() => {
+    return import.meta.env?.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('flat_google_client_id') || '';
+  });
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [clientIdInput, setClientIdInput] = useState(googleClientId);
 
   const googleBtnRef = useRef(null);
-  const googleClientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID;
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
@@ -75,12 +75,12 @@ export default function LoginPage() {
       setIsLoading(true);
       setErrorMsg('');
       const member = await loginWithGoogle({ credential: response.credential });
-      addToast(`Welcome, ${member.name}! Signed in via Google.`, 'success');
+      addToast(`Welcome, ${member.name}! Authenticated with Google API.`, 'success');
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Google Sign-In error:', err);
       if (err.message && err.message.includes('NEEDS_UPI_ID')) {
-        // Parse payload to pre-fill name and email for completing registration
+        // Decode payload solely for displaying account confirmation UI to user
         try {
           const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
           setPendingGoogleData({
@@ -94,18 +94,21 @@ export default function LoginPage() {
           setPendingGoogleData({ credential: response.credential });
         }
       } else {
-        setErrorMsg(err.message || 'Google authentication failed.');
+        setErrorMsg(err.message || 'Google API authentication failed.');
       }
     } finally {
       setIsLoading(false);
     }
   }, [loginWithGoogle, addToast, navigate]);
 
-  // Initialize Google Identity Services (GSI) if client ID is configured
+  // Initialize Google Identity Services (GSI) when client ID is available
   useEffect(() => {
     if (!googleClientId) return;
 
+    let isSubscribed = true;
+
     const checkAndInitGoogle = () => {
+      if (!isSubscribed) return;
       if (window.google?.accounts?.id && googleBtnRef.current) {
         try {
           window.google.accounts.id.initialize({
@@ -114,13 +117,17 @@ export default function LoginPage() {
             auto_select: false,
           });
 
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'filled_blue',
-            size: 'large',
-            shape: 'pill',
-            width: 320,
-            text: 'continue_with',
-          });
+          // Clear previous buttons if any
+          if (googleBtnRef.current) {
+            googleBtnRef.current.innerHTML = '';
+            window.google.accounts.id.renderButton(googleBtnRef.current, {
+              theme: 'filled_blue',
+              size: 'large',
+              shape: 'pill',
+              width: 300,
+              text: 'continue_with',
+            });
+          }
         } catch (err) {
           console.error('Failed to initialize Google Sign-In button:', err);
         }
@@ -128,10 +135,11 @@ export default function LoginPage() {
     };
 
     checkAndInitGoogle();
-    const interval = setInterval(checkAndInitGoogle, 500);
+    const interval = setInterval(checkAndInitGoogle, 600);
     const timeout = setTimeout(() => clearInterval(interval), 5000);
 
     return () => {
+      isSubscribed = false;
       clearInterval(interval);
       clearTimeout(timeout);
     };
@@ -149,10 +157,10 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
       const member = await loginWithGoogle({
-        ...pendingGoogleData,
+        credential: pendingGoogleData.credential,
         upi_id: upiInput.trim(),
       });
-      addToast(`Welcome to the flat, ${member.name}! Account registered with Google.`, 'success');
+      addToast(`Welcome to the flat, ${member.name}! Registered via Google API.`, 'success');
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Registration error:', err);
@@ -162,50 +170,25 @@ export default function LoginPage() {
     }
   };
 
-  const handleManualGoogleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    if (!manualGoogleEmail.trim() || !manualGoogleEmail.includes('@')) {
-      setErrorMsg('Please enter a valid Google email address.');
-      return;
-    }
-
-    if (!manualGoogleName.trim() || manualGoogleName.trim().length < 2) {
-      setErrorMsg('Please enter your full name (at least 2 characters).');
-      return;
-    }
-
-    if (!manualGoogleUpi.trim() || !manualGoogleUpi.includes('@')) {
-      setErrorMsg('A valid UPI ID is mandatory for receiving flat payments (e.g. name@okhdfcbank or 9876543210@paytm).');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const member = await loginWithGoogle({
-        email: manualGoogleEmail.trim().toLowerCase(),
-        name: manualGoogleName.trim(),
-        upi_id: manualGoogleUpi.trim(),
-        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(manualGoogleName.trim())}`,
-      });
-      addToast(`Welcome, ${member.name}! Signed in via Google.`, 'success');
-      setShowManualGoogleModal(false);
-      navigate('/', { replace: true });
-    } catch (err) {
-      console.error('Google Auth error:', err);
-      setErrorMsg(err.message || 'Failed to authenticate with Google.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleGoogleClick = () => {
     if (googleClientId && window.google?.accounts?.id) {
       window.google.accounts.id.prompt();
     } else {
-      setShowManualGoogleModal(true);
+      setShowConfigModal(true);
     }
+  };
+
+  const handleSaveGoogleClientId = (e) => {
+    e.preventDefault();
+    const cleanId = clientIdInput.trim();
+    if (!cleanId) {
+      setErrorMsg('Please enter your Google OAuth Client ID.');
+      return;
+    }
+    localStorage.setItem('flat_google_client_id', cleanId);
+    setGoogleClientId(cleanId);
+    setShowConfigModal(false);
+    addToast('Google Client ID connected! Initializing Google Sign-In...', 'success');
   };
 
   return (
@@ -242,7 +225,7 @@ export default function LoginPage() {
           <div className="text-center space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-1">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Mandatory Google Authentication</span>
+              <span>Mandatory Google API Authentication</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               {pendingGoogleData ? 'Almost Done!' : 'Sign In with Google'}
@@ -250,7 +233,7 @@ export default function LoginPage() {
             <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
               {pendingGoogleData
                 ? 'Please add your personal UPI ID so flatmates can settle debts with you instantly.'
-                : 'Sign in directly with your Google account. No passwords to remember or forget!'}
+                : 'Sign in securely using Google OAuth API. Real-time token verification guarantees flatmate identity.'}
             </p>
           </div>
 
@@ -265,17 +248,28 @@ export default function LoginPage() {
           {/* Step 2: Prompt for UPI ID if new user signing up via Google */}
           {pendingGoogleData ? (
             <form onSubmit={handleCompleteGoogleRegistration} className="space-y-4">
-              <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-700/60 text-xs space-y-1">
+              <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-700/60 text-xs space-y-2">
                 <div className="font-bold text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Google Account Verified</span>
+                  <span>Google Account Verified via API</span>
                 </div>
-                {pendingGoogleData.name && (
-                  <p className="text-slate-300 font-medium">Name: {pendingGoogleData.name}</p>
-                )}
-                {pendingGoogleData.email && (
-                  <p className="text-slate-400">Email: {pendingGoogleData.email}</p>
-                )}
+                <div className="flex items-center gap-3 pt-1">
+                  {pendingGoogleData.avatar_url ? (
+                    <img
+                      src={pendingGoogleData.avatar_url}
+                      alt={pendingGoogleData.name || 'User'}
+                      className="w-10 h-10 rounded-full border border-indigo-400/40 object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white">
+                      {(pendingGoogleData.name || 'U')[0]}
+                    </div>
+                  )}
+                  <div className="overflow-hidden">
+                    <p className="text-white font-bold truncate">{pendingGoogleData.name}</p>
+                    <p className="text-slate-400 text-[11px] truncate">{pendingGoogleData.email}</p>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -331,7 +325,7 @@ export default function LoginPage() {
               <div className="flex flex-col items-center justify-center space-y-3">
                 <div ref={googleBtnRef} id="google-btn-container" className="min-h-[44px] flex items-center justify-center"></div>
 
-                {/* Custom Google Sign In Button */}
+                {/* Custom Google Sign In Trigger button */}
                 <button
                   type="button"
                   onClick={handleGoogleClick}
@@ -343,34 +337,61 @@ export default function LoginPage() {
                 </button>
               </div>
 
+              {/* Status / Client ID connection reminder */}
+              {!googleClientId && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 text-xs text-amber-200 flex items-center justify-between">
+                  <span>Google Client ID not yet linked</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigModal(true)}
+                    className="font-bold underline hover:text-white cursor-pointer ml-2"
+                  >
+                    Setup in 1 min →
+                  </button>
+                </div>
+              )}
+
               {/* Security highlights */}
               <div className="bg-slate-900/60 p-4 rounded-2xl border border-white/10 space-y-2 text-xs text-slate-300">
-                <div className="flex items-center gap-2 font-bold text-indigo-300">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Why Google Only?</span>
+                <div className="flex items-center justify-between font-bold text-indigo-300">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Verified with Google Public API</span>
+                  </div>
+                  {googleClientId && (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfigModal(true)}
+                      className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
+                      title="Update Google Client ID"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>Config</span>
+                    </button>
+                  )}
                 </div>
                 <ul className="space-y-1 text-slate-400 text-[11px] list-disc list-inside">
-                  <li>No passwords to remember, reset, or forget.</li>
+                  <li>Tokens cryptographically validated via Google's tokeninfo API.</li>
+                  <li>Prevents password theft or unauthorized account access.</li>
                   <li>One-click instant authentication on phone and desktop.</li>
-                  <li>Guaranteed account ownership for expense verification.</li>
                 </ul>
               </div>
             </div>
           )}
         </div>
 
-        {/* Manual / Development Google Sign-In Modal */}
-        {showManualGoogleModal && (
+        {/* Configuration Modal for Google Client ID */}
+        {showConfigModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <GoogleLogo className="w-5 h-5" />
-                  <h3 className="font-extrabold text-base text-white">Google Sign-In</h3>
+                  <h3 className="font-extrabold text-base text-white">Google OAuth Setup</h3>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowManualGoogleModal(false)}
+                  onClick={() => setShowConfigModal(false)}
                   className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer text-sm"
                 >
                   ✕
@@ -378,84 +399,62 @@ export default function LoginPage() {
               </div>
 
               <p className="text-xs text-slate-300">
-                Sign in with your Google account credentials. If you are a new roommate, your account will be created automatically.
+                FlatMatePay requires a Google OAuth 2.0 Web Client ID to authenticate flatmates via Google's free API.
               </p>
 
-              <form onSubmit={handleManualGoogleAuthSubmit} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                    Google Email <span className="text-indigo-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-3 text-slate-400">
-                      <Mail className="w-4 h-4" />
-                    </span>
-                    <input
-                      type="email"
-                      required
-                      placeholder="e.g. uditraj@gmail.com"
-                      value={manualGoogleEmail}
-                      onChange={(e) => setManualGoogleEmail(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                </div>
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+                <p className="font-bold text-indigo-300 flex items-center gap-1.5">
+                  <span>How to get your free Google Client ID (1 minute):</span>
+                  <a
+                    href="https://console.cloud.google.com/apis/credentials"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-400 underline hover:text-indigo-300 inline-flex items-center gap-0.5"
+                  >
+                    Console <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                  <li>Go to Google Cloud Console Credentials.</li>
+                  <li>Click <strong>Create Credentials</strong> → <strong>OAuth client ID</strong>.</li>
+                  <li>Select <strong>Web application</strong>.</li>
+                  <li>Add Authorized JavaScript origins:
+                    <code className="block mt-0.5 text-[10px] text-indigo-300 bg-slate-900 p-1 rounded">
+                      {window.location.origin}
+                    </code>
+                  </li>
+                  <li>Copy your <strong>Client ID</strong> and paste below:</li>
+                </ol>
+              </div>
 
+              <form onSubmit={handleSaveGoogleClientId} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                    Your Full Name <span className="text-indigo-400">*</span>
+                    Google OAuth Client ID
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-3 text-slate-400">
-                      <User className="w-4 h-4" />
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Udit Raj"
-                      value={manualGoogleName}
-                      onChange={(e) => setManualGoogleName(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
-                    Your Settlement UPI ID <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-3 text-slate-400">
-                      <QrCode className="w-4 h-4" />
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 7992311040@paytm or name@okhdfcbank"
-                      value={manualGoogleUpi}
-                      onChange={(e) => setManualGoogleUpi(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Used so flatmates can pay you when debts are settled.
-                  </p>
+                  <input
+                    type="text"
+                    required
+                    placeholder="xxxx-xxxx.apps.googleusercontent.com"
+                    value={clientIdInput}
+                    onChange={(e) => setClientIdInput(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
+                  />
                 </div>
 
                 <div className="pt-2 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowManualGoogleModal(false)}
+                    onClick={() => setShowConfigModal(false)}
                     className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isLoading}
                     className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
-                    {isLoading ? <span>Signing In...</span> : <span>Sign In with Google</span>}
+                    Connect Google API
                   </button>
                 </div>
               </form>
@@ -481,7 +480,7 @@ export default function LoginPage() {
 
       {/* Footer */}
       <footer className="max-w-md w-full mx-auto text-center py-3 text-xs text-slate-500">
-        FlatMatePay • Protected with Google OAuth
+        FlatMatePay • Protected with Google OAuth API
       </footer>
     </div>
   );
