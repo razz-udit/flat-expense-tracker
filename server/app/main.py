@@ -113,10 +113,23 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS next_due_date DATE;"))
             conn.commit()
 
-            # Ensure at least one admin exists if members are present
+            # Clean out legacy/dummy mock accounts (@flat.local) so the user starts 100% fresh
             from app.models.member import Member
+            from app.models.expense import Expense, ExpenseSplit
+            from app.models.payment import Payment
+            from app.models.recurring import RecurringExpense
             db_session = SessionLocal()
             try:
+                dummy_members = db_session.query(Member).filter(Member.email.like("%@flat.local")).all()
+                for dm in dummy_members:
+                    db_session.query(ExpenseSplit).filter(ExpenseSplit.member_id == dm.id).delete()
+                    db_session.query(Expense).filter(Expense.paid_by == dm.id).delete()
+                    db_session.query(Payment).filter((Payment.from_member == dm.id) | (Payment.to_member == dm.id)).delete()
+                    db_session.query(RecurringExpense).filter(RecurringExpense.paid_by == dm.id).delete()
+                    db_session.delete(dm)
+                db_session.commit()
+
+                # Ensure remaining active member is admin if no admin exists
                 admin_exists = db_session.query(Member).filter(Member.is_admin == True, Member.is_active == True).first()
                 if not admin_exists:
                     first_member = db_session.query(Member).filter(Member.is_active == True).order_by(Member.id).first()

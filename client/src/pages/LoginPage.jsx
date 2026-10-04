@@ -117,55 +117,57 @@ export default function LoginPage() {
     }
   }, [loginWithGoogle, addToast, navigate]);
 
-  // Initialize Google Identity Services (GSI) ONCE without continuous polling
+  // Initialize Google Identity Services (GSI)
   useEffect(() => {
     if (!googleClientId) return;
-    hasRenderedGoogleBtnRef.current = false;
 
     let intervalId = null;
 
-    const initGoogleOnce = () => {
-      if (hasRenderedGoogleBtnRef.current) {
+    const renderGoogleBtn = () => {
+      if (!googleBtnRef.current || !window.google?.accounts?.id) return;
+
+      // If iframe already rendered inside googleBtnRef, mark loaded and stop polling
+      if (googleBtnRef.current.querySelector('iframe')) {
+        setIsGoogleBtnLoaded(true);
         if (intervalId) clearInterval(intervalId);
         return;
       }
 
-      if (window.google?.accounts?.id && googleBtnRef.current) {
-        try {
-          window.google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: handleGoogleCredentialResponse,
-            auto_select: false,
-          });
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+        });
 
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'outline',
-            size: 'large',
-            shape: 'rectangular',
-            width: 320,
-            text: 'continue_with',
-          });
+        googleBtnRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          shape: 'rectangular',
+          width: 320,
+          text: 'continue_with',
+        });
 
-          hasRenderedGoogleBtnRef.current = true;
-          setIsGoogleBtnLoaded(true);
-          if (intervalId) {
-            clearInterval(intervalId);
+        setTimeout(() => {
+          if (googleBtnRef.current?.querySelector('iframe')) {
+            setIsGoogleBtnLoaded(true);
           }
-        } catch (err) {
-          console.error('Failed to initialize Google Sign-In button:', err);
-        }
+        }, 150);
+
+        if (intervalId) clearInterval(intervalId);
+      } catch (err) {
+        console.error('Failed to initialize Google Sign-In button:', err);
       }
     };
 
-    // Attempt immediate initialization
-    initGoogleOnce();
+    renderGoogleBtn();
 
-    // If Google script tag is still downloading, poll until ready then stop immediately
-    if (!hasRenderedGoogleBtnRef.current) {
-      intervalId = setInterval(initGoogleOnce, 300);
+    if (!googleBtnRef.current?.querySelector('iframe')) {
+      intervalId = setInterval(renderGoogleBtn, 200);
       const timeoutId = setTimeout(() => {
         if (intervalId) clearInterval(intervalId);
-      }, 5000);
+      }, 8000);
 
       return () => {
         if (intervalId) clearInterval(intervalId);
@@ -249,7 +251,14 @@ export default function LoginPage() {
 
   const handleGoogleClick = () => {
     if (googleClientId && window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+        });
+        window.google.accounts.id.prompt();
+      } catch (_) {}
     } else {
       setShowConfigModal(true);
     }
@@ -449,163 +458,171 @@ export default function LoginPage() {
                 </button>
               </div>
             </form>
-          ) : authMode === 'password' ? (
-            /* Password Authentication Form */
-            <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Roommate Name or Email <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <User className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rahul or rahul@flat.local"
-                    value={passwordIdentifier}
-                    onChange={(e) => setPasswordIdentifier(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Password <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Enter your password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <span>Signing In...</span>
-                ) : (
-                  <>
-                    <span>Sign In with Password</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          ) : authMode === 'claim' ? (
-            /* Claim Account / Invite Token Form */
-            <form onSubmit={handleClaimAccount} className="space-y-4 text-left">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  One-Time Invite Token <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <KeyRound className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Paste the claim token provided by admin"
-                    value={claimTokenInput}
-                    onChange={(e) => setClaimTokenInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white font-mono placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Ask your Flat Admin to generate an invite token in Flat Settings.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Set Your Password <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Create a strong password (min 4 characters)"
-                    value={claimPasswordInput}
-                    onChange={(e) => setClaimPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Confirm Password <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Confirm your password"
-                    value={confirmClaimPasswordInput}
-                    onChange={(e) => setConfirmClaimPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <span>Activating Account...</span>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Activate Account &amp; Sign In</span>
-                  </>
-                )}
-              </button>
-            </form>
           ) : (
-            /* Single Minimalist Google Sign-In Action */
-            <div className="flex flex-col items-center justify-center pt-2 min-h-[46px]">
-              {/* External Google Button Container - purely managed by Google SDK */}
-              <div
-                ref={googleBtnRef}
-                id="google-btn-container"
-                className={isGoogleBtnLoaded ? 'flex items-center justify-center' : 'hidden'}
-              />
+            <>
+              {/* Google Sign-In Mode */}
+              <div className={authMode === 'google' ? 'block' : 'hidden'}>
+                <div className="flex flex-col items-center justify-center pt-2 min-h-[46px]">
+                  {/* External Google Button Container - purely managed by Google SDK */}
+                  <div
+                    ref={googleBtnRef}
+                    id="google-btn-container"
+                    className={isGoogleBtnLoaded ? 'flex items-center justify-center min-h-[44px]' : 'hidden'}
+                  />
 
-              {/* Fallback button - managed purely by React as a sibling, never inside googleBtnRef */}
-              {!isGoogleBtnLoaded && (
-                <button
-                  type="button"
-                  onClick={handleGoogleClick}
-                  disabled={isLoading}
-                  className="py-3 px-6 rounded-xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
-                >
-                  <GoogleLogo className="w-5 h-5 shrink-0" />
-                  <span>Continue with Google</span>
-                </button>
-              )}
-            </div>
+                  {/* Fallback button - managed purely by React as a sibling, never inside googleBtnRef */}
+                  {!isGoogleBtnLoaded && (
+                    <button
+                      type="button"
+                      onClick={handleGoogleClick}
+                      disabled={isLoading}
+                      className="py-3 px-6 rounded-xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
+                    >
+                      <GoogleLogo className="w-5 h-5 shrink-0" />
+                      <span>Continue with Google</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Password Authentication Form */}
+              <div className={authMode === 'password' ? 'block' : 'hidden'}>
+                <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                      Roommate Name or Email <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-slate-400">
+                        <User className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Rahul or rahul@flat.local"
+                        value={passwordIdentifier}
+                        onChange={(e) => setPasswordIdentifier(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                      Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Enter your password"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <span>Signing In...</span>
+                    ) : (
+                      <>
+                        <span>Sign In with Password</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* Claim Account / Invite Token Form */}
+              <div className={authMode === 'claim' ? 'block' : 'hidden'}>
+                <form onSubmit={handleClaimAccount} className="space-y-4 text-left">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                      One-Time Invite Token <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-slate-400">
+                        <KeyRound className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Paste the claim token provided by admin"
+                        value={claimTokenInput}
+                        onChange={(e) => setClaimTokenInput(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white font-mono placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Ask your Flat Admin to generate an invite token in Flat Settings.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                      Set Your Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Create a strong password (min 4 characters)"
+                        value={claimPasswordInput}
+                        onChange={(e) => setClaimPasswordInput(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                      Confirm Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Confirm your password"
+                        value={confirmClaimPasswordInput}
+                        onChange={(e) => setConfirmClaimPasswordInput(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <span>Activating Account...</span>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Activate Account &amp; Sign In</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </>
           )}
         </div>
 
