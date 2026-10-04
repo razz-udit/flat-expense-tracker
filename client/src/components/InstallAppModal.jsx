@@ -28,12 +28,12 @@ export default function InstallAppModal({ isOpen, onClose }) {
 
         {/* Header with App Icon */}
         <div className="flex items-center gap-3.5 pr-8">
-          <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 shrink-0">
+          <div className="w-13 h-13 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shadow-sm shrink-0">
             <Smartphone className="w-7 h-7" />
           </div>
           <div>
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-extrabold uppercase tracking-wider mb-1">
-              <Sparkles className="w-3 h-3 text-indigo-600" />
+            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+              <Sparkles className="w-3 h-3 text-emerald-600" />
               <span>Mobile App</span>
             </div>
             <h3 className="font-black text-lg text-slate-900 leading-tight">
@@ -79,9 +79,9 @@ export default function InstallAppModal({ isOpen, onClose }) {
                 promptInstall();
                 onClose();
               }}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-sm shadow-md shadow-indigo-200 transition-all active:scale-98 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm shadow-xs transition-colors cursor-pointer"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 text-emerald-400" />
               <span>Install Application Now</span>
             </button>
             <p className="text-center text-[11px] text-slate-400">
@@ -94,28 +94,28 @@ export default function InstallAppModal({ isOpen, onClose }) {
               How to Install on iPhone / iPad (Safari):
             </div>
             <ol className="space-y-2.5 text-xs text-slate-600">
-              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-indigo-50/50 border border-indigo-100">
-                <div className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="w-5 h-5 rounded-md bg-slate-900 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                   1
                 </div>
                 <div>
-                  Tap the <strong className="text-indigo-950 font-bold inline-flex items-center gap-1">Share button <Share className="w-3.5 h-3.5 text-indigo-600 inline" /></strong> in Safari's bottom toolbar.
+                  Tap the <strong className="text-slate-900 font-bold inline-flex items-center gap-1">Share button <Share className="w-3.5 h-3.5 text-slate-700 inline" /></strong> in Safari's bottom toolbar.
                 </div>
               </li>
-              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-indigo-50/50 border border-indigo-100">
-                <div className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="w-5 h-5 rounded-md bg-slate-900 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                   2
                 </div>
                 <div>
-                  Scroll down the menu and tap <strong className="text-indigo-950 font-bold inline-flex items-center gap-1">"Add to Home Screen" <PlusSquare className="w-3.5 h-3.5 text-indigo-600 inline" /></strong>.
+                  Scroll down the menu and tap <strong className="text-slate-900 font-bold inline-flex items-center gap-1">"Add to Home Screen" <PlusSquare className="w-3.5 h-3.5 text-slate-700 inline" /></strong>.
                 </div>
               </li>
-              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-indigo-50/50 border border-indigo-100">
-                <div className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+              <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="w-5 h-5 rounded-md bg-slate-900 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                   3
                 </div>
                 <div>
-                  Tap <strong className="text-indigo-950 font-bold">"Add"</strong> in the top-right corner. The app will appear on your Home Screen!
+                  Tap <strong className="text-slate-900 font-bold">"Add"</strong> in the top-right corner. The app will appear on your Home Screen!
                 </div>
               </li>
             </ol>
@@ -146,7 +146,7 @@ export default function InstallAppModal({ isOpen, onClose }) {
           <span>PWA Version 1.0 • Offline Ready</span>
           <button
             onClick={onClose}
-            className="text-indigo-600 font-bold hover:underline cursor-pointer"
+            className="text-slate-700 font-bold hover:underline cursor-pointer"
           >
             Close
           </button>

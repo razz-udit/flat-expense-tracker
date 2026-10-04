@@ -161,9 +161,9 @@ export default function RecurringPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Recurring Expenses</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Recurring Expenses</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Predefined regular flat expenses like Rent, Maid, and WiFi that you can post with one click
           </p>
@@ -171,39 +171,39 @@ export default function RecurringPage() {
 
         <button
           onClick={() => handleOpenTemplateModal()}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
         >
-          <PlusCircle className="w-4 h-4" />
+          <PlusCircle className="w-4 h-4 text-emerald-400" />
           <span>New Recurring Template</span>
         </button>
       </div>
 
       {/* Safety Notice */}
-      <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 flex items-start gap-2.5">
-        <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-600 flex items-start gap-2.5">
+        <Sparkles className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-bold">Duplicate Protection:</span> Recurring expenses are templates and do not
+          <span className="font-bold text-slate-900">Duplicate Protection:</span> Recurring expenses are templates and do not
           automatically post to your accounts without confirmation. Whenever a new billing cycle arrives, simply
-          click <span className="font-bold">"Create This Month's Expense"</span> below.
+          click <span className="font-bold text-slate-900">"Create This Month's Expense"</span> below.
         </div>
       </div>
 
       {/* Templates List */}
       {isLoading ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p className="text-xs text-slate-500">Loading recurring templates...</p>
+        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/80">
+          <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-xs text-slate-500 font-medium">Loading recurring templates...</p>
         </div>
       ) : recurringList.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-xs">
           <Repeat className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">No Recurring Templates Yet</h3>
+          <h3 className="text-base font-bold text-slate-900">No Recurring Templates Yet</h3>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Set up standard flat expenses like monthly Rent or Cook charges.
           </p>
           <button
             onClick={() => handleOpenTemplateModal()}
-            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"
+            className="px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl cursor-pointer"
           >
             + Create First Template
           </button>
@@ -213,28 +213,28 @@ export default function RecurringPage() {
           {recurringList.map((item) => (
             <div
               key={item.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4 hover:border-indigo-200 transition-all"
+              className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between space-y-4 hover:border-slate-400/80 transition-all"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 uppercase">
+                    <span className="inline-block px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60 uppercase">
                       {item.frequency}
                     </span>
-                    <h3 className="font-bold text-base text-slate-900 mt-1">{item.title}</h3>
+                    <h3 className="font-black text-base text-slate-900 mt-1">{item.title}</h3>
                   </div>
 
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleOpenTemplateModal(item)}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
                       title="Edit Template"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteTemplate(item.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                       title="Delete Template"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -243,9 +243,9 @@ export default function RecurringPage() {
                 </div>
 
                 {/* Amount */}
-                <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div className="mt-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-500">Standard Amount</span>
-                  <span className="text-xl font-extrabold text-slate-900">{formatCurrency(item.amount)}</span>
+                  <span className="text-xl font-black text-slate-900 tabular-nums">{formatCurrency(item.amount)}</span>
                 </div>
 
                 {/* Details */}
@@ -260,7 +260,7 @@ export default function RecurringPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Split Between:</span>
-                    <span className="font-semibold text-indigo-700">
+                    <span className="font-semibold text-slate-800">
                       All {members.length} Members (Equal)
                     </span>
                   </div>
@@ -276,9 +276,9 @@ export default function RecurringPage() {
               <div className="pt-2 border-t border-slate-100">
                 <button
                   onClick={() => handleOpenGenerateModal(item)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                 >
-                  <Receipt className="w-4 h-4" />
+                  <Receipt className="w-4 h-4 text-emerald-400" />
                   <span>Create This Month's Expense</span>
                 </button>
               </div>
@@ -340,7 +340,7 @@ export default function RecurringPage() {
                 type="button"
                 disabled={isGenerating}
                 onClick={handleConfirmGenerateExpense}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
               >
                 {isGenerating ? 'Creating...' : 'Confirm & Post Expense'}
               </button>
@@ -462,7 +462,7 @@ export default function RecurringPage() {
                 <button
                   type="submit"
                   disabled={isSavingTemplate}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSavingTemplate ? 'Saving...' : 'Save Template'}
                 </button>

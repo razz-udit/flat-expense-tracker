@@ -272,7 +272,7 @@ export default function SettlementsPage() {
   if (isLoading && !balances.length && !paymentsHistory.length) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
         <p className="text-xs text-slate-500 font-medium">Calculating settlements, budgets & balances...</p>
       </div>
     );
@@ -281,9 +281,9 @@ export default function SettlementsPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
             Settlements & Payment Tracking
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -294,28 +294,28 @@ export default function SettlementsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleOpenBudgetModal()}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 shadow-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl border border-slate-200/90 shadow-xs transition-colors cursor-pointer"
           >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Set Category Budget</span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+            <span>Set Budget</span>
           </button>
           <button
             onClick={() => handleOpenRecordModal()}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-4 h-4 text-emerald-400" />
             <span>Record Settlement</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-white px-4 rounded-t-2xl overflow-x-auto">
+      <div className="flex border-b border-slate-200/80 bg-white px-4 rounded-t-2xl overflow-x-auto">
         <button
           onClick={() => setActiveTab('planner')}
           className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'planner'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-slate-900 text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -327,7 +327,7 @@ export default function SettlementsPage() {
           onClick={() => setActiveTab('budgets')}
           className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'budgets'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-slate-900 text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -339,7 +339,7 @@ export default function SettlementsPage() {
           onClick={() => setActiveTab('history')}
           className={`py-3.5 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'history'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-slate-900 text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -351,16 +351,16 @@ export default function SettlementsPage() {
       {/* Tab Content 1: Who Owes Whom (Planner) */}
       {activeTab === 'planner' && (
         <div className="space-y-4">
-          <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-900 leading-relaxed">
-            <span className="font-bold">Debt Simplification Algorithm:</span> Transactions are minimized so flat
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-600 leading-relaxed">
+            <span className="font-bold text-slate-900">Debt Simplification Algorithm:</span> Transactions are minimized so flat
             members do not need to make redundant cross-payments. For example, if A owes B, and B owes C, the
             system calculates direct settlements between debtors and creditors.
           </div>
 
           {settlements.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-xs">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-800">All Debts Are Settled!</h3>
+              <h3 className="text-base font-bold text-slate-900">All Debts Are Settled!</h3>
               <p className="text-xs text-slate-500 mt-1">
                 There are no pending amounts between any flat members.
               </p>
@@ -370,44 +370,44 @@ export default function SettlementsPage() {
               {settlements.map((s, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4 hover:border-indigo-200 transition-all"
+                  className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between space-y-4 hover:border-slate-400/80 transition-all"
                 >
                   <div>
                     {/* From -> To */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-700 flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-bold text-xs shrink-0 border border-rose-100">
                           {s.from_member_name.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Sender</span>
-                          <span className="text-xs font-bold text-slate-800 truncate block">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Sender</span>
+                          <span className="text-xs font-bold text-slate-900 truncate block">
                             {s.from_member_name}
                           </span>
                         </div>
                       </div>
 
-                      <ArrowRight className="w-4 h-4 text-indigo-500 shrink-0" />
+                      <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
 
-                      <div className="flex items-center gap-2 min-w-0 text-right">
+                      <div className="flex items-center gap-2.5 min-w-0 text-right">
                         <div className="min-w-0">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Receiver</span>
-                          <span className="text-xs font-bold text-indigo-700 truncate block">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Receiver</span>
+                          <span className="text-xs font-bold text-slate-900 truncate block">
                             {s.to_member_name}
                           </span>
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-100">
                           {s.to_member_name.charAt(0)}
                         </div>
                       </div>
                     </div>
 
                     {/* Amount */}
-                    <div className="text-center py-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="text-center py-4 bg-slate-50/80 rounded-xl border border-slate-100">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         Amount to Pay
                       </div>
-                      <div className="text-2xl font-black text-slate-900 mt-0.5">
+                      <div className="text-3xl font-black text-slate-900 mt-1 tabular-nums">
                         {formatCurrency(s.amount)}
                       </div>
                       {s.to_member_upi && (
@@ -432,10 +432,10 @@ export default function SettlementsPage() {
                           upiLink: s.upi_link,
                         })
                       }
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                     >
-                      <QrCode className="w-4 h-4" />
-                      <span>Pay UPI / Mode</span>
+                      <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Pay UPI</span>
                     </button>
 
                     <button
@@ -447,9 +447,9 @@ export default function SettlementsPage() {
                           notes: `Settlement from ${s.from_member_name} to ${s.to_member_name}`,
                         })
                       }
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                     >
-                      <Check className="w-4 h-4" />
+                      <Check className="w-3.5 h-3.5" />
                       <span>Mark Paid</span>
                     </button>
                   </div>
@@ -464,22 +464,22 @@ export default function SettlementsPage() {
       {activeTab === 'budgets' && (
         <div className="space-y-6">
           {/* Explanation Banner */}
-          <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 border border-indigo-100 rounded-2xl p-5 text-indigo-950 shadow-xs">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+          <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-sm">
+            <div className="flex items-start gap-3.5">
+              <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
                 <SlidersHorizontal className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-extrabold text-sm text-indigo-950 flex items-center gap-2">
+                <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
                   <span>Category Budget Equalization System</span>
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-200/60 text-indigo-800 text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
                     Automatic Fair Splitting
                   </span>
                 </h3>
-                <p className="text-xs text-indigo-900 leading-relaxed">
-                  Set a monthly spending target per flatmate for any category (e.g., <strong>₹1,500/member for Groceries</strong>). 
-                  If <strong>Member A pays ₹1,700</strong> (+₹200 surplus) and <strong>Member B pays ₹1,300</strong> (-₹200 deficit), 
-                  the Equalizer automatically schedules a <strong>₹200 transfer from Member B to Member A</strong> so all roommates share the exact ₹1,500 budget!
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Set a monthly spending target per flatmate for any category (e.g., <strong className="text-white">₹1,500/member for Groceries</strong>). 
+                  If <strong className="text-white">Member A pays ₹1,700</strong> (+₹200 surplus) and <strong className="text-white">Member B pays ₹1,300</strong> (-₹200 deficit), 
+                  the Equalizer automatically schedules a <strong className="text-emerald-400">₹200 transfer from Member B to Member A</strong> so all roommates share the exact ₹1,500 budget!
                 </p>
               </div>
             </div>
@@ -487,11 +487,11 @@ export default function SettlementsPage() {
 
           {/* Category Cards */}
           {categoryBudgets.length === 0 ? (
-            <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center p-6 space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+            <div className="py-12 bg-white rounded-2xl border border-slate-200/80 text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center mx-auto">
                 <SlidersHorizontal className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-sm text-slate-800">No Categories Created Yet</h3>
+              <h3 className="font-bold text-sm text-slate-900">No Categories Created Yet</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 Categories are completely dynamic. Create custom categories when recording an expense or in Settings to set monthly member budgets.
               </p>
@@ -508,20 +508,20 @@ export default function SettlementsPage() {
               return (
                 <div
                   key={cat.category_id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between hover:border-indigo-200 transition-all space-y-5"
+                  className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between hover:border-slate-400/80 transition-all space-y-5"
                 >
                   <div className="space-y-4">
                     {/* Header: Name, Budget Badge, Edit button */}
                     <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h2 className="text-base font-extrabold text-slate-900">{cat.category_name}</h2>
+                          <h2 className="text-base font-black text-slate-900">{cat.category_name}</h2>
                           {hasBudget ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold">
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-extrabold tabular-nums">
                               Target: {formatCurrency(targetPerMember)} / member
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                            <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-bold">
                               No Budget Target Set
                             </span>
                           )}
@@ -533,7 +533,7 @@ export default function SettlementsPage() {
 
                       <button
                         onClick={() => handleOpenBudgetModal(cat)}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="Set or Adjust Monthly Budget"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -542,16 +542,16 @@ export default function SettlementsPage() {
                     </div>
 
                     {/* Spend vs Budget Summary */}
-                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 space-y-2">
+                    <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100 space-y-2">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-slate-600">Total Spent This Month:</span>
-                        <span className="font-black text-slate-900">{formatCurrency(totalSpent)}</span>
+                        <span className="font-black text-slate-900 tabular-nums">{formatCurrency(totalSpent)}</span>
                       </div>
                       {hasBudget && (
                         <>
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-semibold text-slate-600">Flat Target Budget:</span>
-                            <span className="font-bold text-indigo-700">
+                            <span className="font-bold text-slate-900 tabular-nums">
                               {formatCurrency(totalBudget)} ({formatCurrency(targetPerMember)} × {cat.members_count})
                             </span>
                           </div>
@@ -563,7 +563,7 @@ export default function SettlementsPage() {
                                   ? 'bg-rose-500'
                                   : totalSpent >= totalBudget * 0.9
                                   ? 'bg-amber-500'
-                                  : 'bg-indigo-600'
+                                  : 'bg-emerald-500'
                               }`}
                               style={{ width: `${Math.min((totalSpent / (totalBudget || 1)) * 100, 100)}%` }}
                             />
@@ -574,7 +574,7 @@ export default function SettlementsPage() {
 
                     {/* Member Contributions Breakdown */}
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                         Flatmate Contributions vs Target
                       </div>
                       <div className="space-y-2">
@@ -588,14 +588,14 @@ export default function SettlementsPage() {
                               className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-white hover:bg-slate-50/60 transition-colors"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
                                   {m.member_name.charAt(0)}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-xs font-bold text-slate-900 truncate">
                                     {m.member_name}
                                     {currentUser?.id === m.member_id && (
-                                      <span className="ml-1 text-[10px] text-indigo-600 font-semibold">(You)</span>
+                                      <span className="ml-1 text-[10px] text-emerald-600 font-semibold">(You)</span>
                                     )}
                                   </div>
                                   <div className="text-[10px] text-slate-400 font-mono">
@@ -605,21 +605,21 @@ export default function SettlementsPage() {
                               </div>
 
                               <div className="text-right">
-                                <div className="text-xs font-bold text-slate-800">
+                                <div className="text-xs font-bold text-slate-800 tabular-nums">
                                   Paid: {formatCurrency(paid)}
                                 </div>
                                 {hasBudget ? (
                                   <div className="mt-0.5">
                                     {diff > 0.01 ? (
-                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                                      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/60 tabular-nums">
                                         +{formatCurrency(diff)} (Surplus)
                                       </span>
                                     ) : diff < -0.01 ? (
-                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800">
+                                      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200/60 tabular-nums">
                                         -{formatCurrency(Math.abs(diff))} (Deficit)
                                       </span>
                                     ) : (
-                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                                      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 tabular-nums">
                                         ✓ On Target ({formatCurrency(targetPerMember)})
                                       </span>
                                     )}
@@ -638,8 +638,8 @@ export default function SettlementsPage() {
 
                     {/* Proposed Equalization Transfers */}
                     {hasTransfers ? (
-                      <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 space-y-2.5">
-                        <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
+                      <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-amber-900">
                           <Sparkles className="w-4 h-4 text-amber-600" />
                           <span>Equalization Transfers Needed ({cat.equalization_transfers.length})</span>
                         </div>
@@ -651,14 +651,14 @@ export default function SettlementsPage() {
                             return (
                               <div
                                 key={tIdx}
-                                className="bg-white p-3 rounded-lg border border-amber-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                               >
                                 <div className="space-y-0.5">
                                   <div className="text-xs font-bold text-slate-900">
                                     <span className="text-rose-700">{t.from_member_name}</span> pays{' '}
                                     <span className="text-emerald-700">{t.to_member_name}</span>
                                   </div>
-                                  <div className="text-sm font-extrabold text-indigo-700">
+                                  <div className="text-base font-black text-slate-900 tabular-nums">
                                     {formatCurrency(t.amount)}
                                   </div>
                                   <div className="text-[10px] text-slate-500">
@@ -680,16 +680,16 @@ export default function SettlementsPage() {
                                         categoryName: cat.category_name,
                                       })
                                     }
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors cursor-pointer"
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                                   >
-                                    <QrCode className="w-3.5 h-3.5" />
-                                    <span>UPI Gateway</span>
+                                    <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>UPI App</span>
                                   </button>
 
                                   <button
                                     onClick={() => handleEqualizeCategoryBudget(t, cat.category_id)}
                                     disabled={isTransferLoading}
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
                                   >
                                     <Check className="w-3.5 h-3.5" />
                                     <span>{isTransferLoading ? 'Equalizing...' : '1-Click Settle'}</span>
@@ -711,7 +711,7 @@ export default function SettlementsPage() {
                       <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-center">
                         <button
                           onClick={() => handleOpenBudgetModal(cat)}
-                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                          className="text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline cursor-pointer"
                         >
                           + Set a monthly budget to enable equalization
                         </button>
@@ -727,10 +727,10 @@ export default function SettlementsPage() {
       )}
 
 
-      {/* Tab Content 4: Settlements History */}
+      {/* Tab Content 3: Settlements History */}
       {activeTab === 'history' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-900">Recorded Settlements & Payments History</h2>
               <p className="text-xs text-slate-500">Every peer-to-peer transfer, payment mode, and receiver verification logged</p>
@@ -747,15 +747,15 @@ export default function SettlementsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">From (Payer)</th>
-                    <th className="py-3 px-4">To (Receiver)</th>
-                    <th className="py-3 px-4 text-right">Amount</th>
-                    <th className="py-3 px-4">Method & Reference</th>
-                    <th className="py-3 px-4">Notes</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-4">Date</th>
+                    <th className="py-3.5 px-4">From (Payer)</th>
+                    <th className="py-3.5 px-4">To (Receiver)</th>
+                    <th className="py-3.5 px-4 text-right">Amount</th>
+                    <th className="py-3.5 px-4">Method & Reference</th>
+                    <th className="py-3.5 px-4">Notes</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -767,34 +767,34 @@ export default function SettlementsPage() {
                     const canRevert = isReceiver || isDefaultAdmin;
                     const canDelete = Boolean(currentUser);
                     return (
-                      <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 text-slate-600 font-medium whitespace-nowrap">
+                      <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 text-slate-600 font-medium whitespace-nowrap">
                           {p.payment_date}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
+                        <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
                           {p.payer?.name || `Member ${p.from_member}`}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-indigo-700 whitespace-nowrap">
+                        <td className="py-3.5 px-4 font-semibold text-emerald-700 whitespace-nowrap">
                           {p.receiver?.name || `Member ${p.to_member}`}
                         </td>
-                        <td className="py-3 px-4 text-right font-extrabold text-slate-900 text-sm whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm whitespace-nowrap tabular-nums">
                           {formatCurrency(p.amount)}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             {p.payment_method === 'Cash' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60">
                                 <Banknote className="w-3 h-3" />
                                 <span>Cash</span>
                               </span>
                             ) : p.payment_method === 'Bank Transfer' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200/60">
                                 <Building className="w-3 h-3" />
                                 <span>Bank/NEFT</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-100">
-                                <QrCode className="w-3 h-3" />
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-bold">
+                                <QrCode className="w-3 h-3 text-emerald-400" />
                                 <span>UPI</span>
                               </span>
                             )}
@@ -805,28 +805,28 @@ export default function SettlementsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-500 max-w-xs truncate">
+                        <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate">
                           {p.notes || '-'}
                         </td>
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           {p.status === 'Paid' ? (
                             p.verified_at ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800" title={`Verified on ${p.verified_at}`}>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/60" title={`Verified on ${p.verified_at}`}>
                                 <ShieldCheck className="w-3 h-3" />
                                 <span>Verified</span>
                               </span>
                             ) : (
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="inline-block px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                 Paid
                               </span>
                             )
                           ) : (
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                            <span className="inline-block px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">
                               Pending
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {p.status === 'Pending' ? (
                               canVerify ? (
@@ -984,8 +984,8 @@ export default function SettlementsPage() {
                         onClick={() => setPaymentMethod(m.id)}
                         className={`flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                           paymentMethod === m.id
-                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-2xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                            : 'bg-white border-slate-200/90 text-slate-600 hover:border-slate-300'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1006,7 +1006,7 @@ export default function SettlementsPage() {
                   placeholder="e.g. 12-digit UPI UTR or Cheque / Ref ID"
                   value={transactionReference}
                   onChange={(e) => setTransactionReference(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs font-mono"
                 />
               </div>
 
@@ -1018,10 +1018,10 @@ export default function SettlementsPage() {
                   <button
                     type="button"
                     onClick={() => setStatus('Paid')}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                       status === 'Paid'
                         ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                        : 'bg-white border-slate-200 text-slate-500'
+                        : 'bg-white border-slate-200/90 text-slate-500'
                     }`}
                   >
                     ✓ Paid (Already Transferred)
@@ -1029,13 +1029,13 @@ export default function SettlementsPage() {
                   <button
                     type="button"
                     onClick={() => setStatus('Pending')}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                       status === 'Pending'
                         ? 'bg-amber-50 border-amber-300 text-amber-800'
-                        : 'bg-white border-slate-200 text-slate-500'
+                        : 'bg-white border-slate-200/90 text-slate-500'
                     }`}
                   >
-                    ⏳ Pending Receiver Verification
+                    ⏳ Pending Verification
                   </button>
                 </div>
               </div>
@@ -1049,7 +1049,7 @@ export default function SettlementsPage() {
                   placeholder="e.g. Paid via PhonePe / Cash handover"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs font-medium"
                 />
               </div>
 
@@ -1057,14 +1057,14 @@ export default function SettlementsPage() {
                 <button
                   type="button"
                   onClick={handleCloseRecordModal}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? 'Saving...' : 'Record Payment'}
                 </button>
@@ -1097,7 +1097,7 @@ export default function SettlementsPage() {
                   value={selectedCategoryId}
                   onChange={(e) => setSelectedCategoryId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-white"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200/90 text-xs font-bold bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
                 >
                   {categoriesList.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1118,7 +1118,7 @@ export default function SettlementsPage() {
                   placeholder="e.g. 1500.00 (Leave empty to remove budget)"
                   value={budgetPerMemberInput}
                   onChange={(e) => setBudgetPerMemberInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200/90 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-900"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
                   Example: Enter <strong>1500</strong> for Grocery so each flatmate's target share is ₹1,500/month.
@@ -1129,14 +1129,14 @@ export default function SettlementsPage() {
                 <button
                   type="button"
                   onClick={handleCloseBudgetModal}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingBudget}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSavingBudget ? 'Saving...' : 'Save Budget'}
                 </button>

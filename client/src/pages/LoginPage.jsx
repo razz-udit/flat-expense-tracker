@@ -122,9 +122,9 @@ export default function LoginPage() {
           });
 
           window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'filled_blue',
+            theme: 'outline',
             size: 'large',
-            shape: 'pill',
+            shape: 'rectangular',
             width: 320,
             text: 'continue_with',
           });
@@ -208,12 +208,12 @@ export default function LoginPage() {
       {/* Header */}
       <header className="max-w-md w-full mx-auto flex items-center justify-between pt-2 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
-            <Building2 className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-white shadow-md">
+            <Building2 className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h1 className="font-extrabold text-xl tracking-tight">
-              FlatMate<span className="text-indigo-400">Pay</span>
+            <h1 className="font-extrabold text-xl tracking-tight text-white">
+              FlatMate<span className="text-emerald-400">Pay</span>
             </h1>
             <p className="text-xs text-slate-400 font-medium">Flat Expense & Settlement Manager</p>
           </div>
@@ -225,7 +225,7 @@ export default function LoginPage() {
           className="flex items-center gap-1.5 text-xs text-white font-bold bg-white/10 hover:bg-white/20 active:scale-95 px-3.5 py-1.5 rounded-xl border border-white/15 shadow-sm transition-all cursor-pointer"
           title="Install FlatMatePay App"
         >
-          <Download className="w-3.5 h-3.5 text-indigo-300" />
+          <Download className="w-3.5 h-3.5 text-emerald-400" />
           <span>Install App</span>
         </button>
       </header>
@@ -266,10 +266,10 @@ export default function LoginPage() {
                     <img
                       src={pendingGoogleData.avatar_url}
                       alt={pendingGoogleData.name || 'User'}
-                      className="w-10 h-10 rounded-full border border-indigo-500/40 object-cover"
+                      className="w-10 h-10 rounded-full border border-emerald-500/40 object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white">
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white">
                       {(pendingGoogleData.name || 'U')[0]}
                     </div>
                   )}
@@ -294,7 +294,7 @@ export default function LoginPage() {
                     placeholder="e.g. rahul@okaxis or 9876543210@paytm"
                     value={upiInput}
                     onChange={(e) => setUpiInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -313,7 +313,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <span>Registering...</span>
@@ -342,7 +342,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handleGoogleClick}
                   disabled={isLoading}
-                  className="py-3 px-6 rounded-full bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
+                  className="py-3 px-6 rounded-xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
                 >
                   <GoogleLogo className="w-5 h-5 shrink-0" />
                   <span>Continue with Google</span>
@@ -423,7 +423,7 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors"
                   >
                     Connect Google API
                   </button>

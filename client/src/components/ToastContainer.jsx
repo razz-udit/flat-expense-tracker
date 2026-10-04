@@ -29,7 +29,7 @@ export default function ToastContainer() {
             ) : isSuccess ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
-              <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <Info className="w-5 h-5 text-slate-700 shrink-0 mt-0.5" />
             )}
 
             <div className="flex-1 text-sm font-medium leading-snug">{toast.message}</div>

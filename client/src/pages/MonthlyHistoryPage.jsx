@@ -72,12 +72,12 @@ export default function MonthlyHistoryPage() {
       </div>
 
       {isLoadingMonths ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p className="text-xs text-slate-500">Loading historical records...</p>
+        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/80">
+          <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-xs text-slate-500 font-medium">Loading historical records...</p>
         </div>
       ) : monthsList.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-xs">
           <CalendarClock className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800">No Monthly Records Yet</h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -88,7 +88,7 @@ export default function MonthlyHistoryPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Months Sidebar (4 cols) */}
           <div className="lg:col-span-4 space-y-3">
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
               Recorded Months ({monthsList.length})
             </h2>
 
@@ -101,19 +101,19 @@ export default function MonthlyHistoryPage() {
                     onClick={() => setSelectedMonth({ year: m.year, month: m.month })}
                     className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-[1.01]'
-                        : 'bg-white border-slate-200 text-slate-800 hover:border-indigo-300 hover:bg-slate-50'
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                        : 'bg-white border-slate-200/80 text-slate-800 hover:border-slate-300 hover:bg-slate-50'
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-sm">{m.month_name}</div>
-                      <div className={`text-xs mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
+                      <div className="font-extrabold text-sm">{m.month_name}</div>
+                      <div className={`text-xs mt-0.5 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
                         {m.expense_count} expenses recorded
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <div className="font-extrabold text-sm">{formatCurrency(m.total_amount)}</div>
+                      <div className="font-black text-sm tabular-nums">{formatCurrency(m.total_amount)}</div>
                       <ChevronRight
                         className={`w-4 h-4 ml-auto mt-1 ${isSelected ? 'text-white' : 'text-slate-400'}`}
                       />
@@ -127,19 +127,19 @@ export default function MonthlyHistoryPage() {
           {/* Month Detail View (8 cols) */}
           <div className="lg:col-span-8 space-y-6">
             {isLoadingDetail ? (
-              <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
-                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                <p className="text-xs text-slate-500">Loading breakdown for selected month...</p>
+              <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/80">
+                <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                <p className="text-xs text-slate-500 font-medium">Loading breakdown for selected month...</p>
               </div>
             ) : monthDetail ? (
               <>
                 {/* Month Summary Card */}
-                <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-md flex items-center justify-between">
+                <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm flex items-center justify-between border border-slate-800">
                   <div>
-                    <span className="text-xs uppercase font-bold text-indigo-300 tracking-wider">
+                    <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">
                       Month Overview
                     </span>
-                    <h2 className="text-2xl font-black mt-1">{monthDetail.month_name}</h2>
+                    <h2 className="text-2xl font-black mt-1 text-white">{monthDetail.month_name}</h2>
                     <p className="text-xs text-slate-300 mt-1">
                       {monthDetail.expense_count} total shared transactions
                     </p>
@@ -147,16 +147,16 @@ export default function MonthlyHistoryPage() {
 
                   <div className="text-right">
                     <span className="text-xs uppercase font-bold text-slate-400">Total Spent</span>
-                    <div className="text-3xl font-black text-emerald-400 mt-1">
+                    <div className="text-3xl font-black text-emerald-400 mt-1 tabular-nums">
                       {formatCurrency(monthDetail.total_amount)}
                     </div>
                   </div>
                 </div>
 
                 {/* Category Spending Breakdown */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-4">
                   <div className="flex items-center gap-2">
-                    <PieChart className="w-4 h-4 text-indigo-600" />
+                    <PieChart className="w-4 h-4 text-slate-500" />
                     <h3 className="text-sm font-bold text-slate-900">Category Breakdown</h3>
                   </div>
 
@@ -164,15 +164,15 @@ export default function MonthlyHistoryPage() {
                     {monthDetail.categories.map((c) => (
                       <div
                         key={c.category_id}
-                        className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
+                        className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-100 space-y-2"
                       >
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-slate-800">{c.category_name}</span>
-                          <span className="font-extrabold text-slate-900">{formatCurrency(c.total_amount)}</span>
+                          <span className="font-black text-slate-900 tabular-nums">{formatCurrency(c.total_amount)}</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div
-                            className="bg-indigo-600 h-1.5 rounded-full"
+                            className="bg-emerald-500 h-1.5 rounded-full"
                             style={{ width: `${Math.min(parseFloat(c.percentage), 100)}%` }}
                           />
                         </div>
@@ -188,7 +188,7 @@ export default function MonthlyHistoryPage() {
                 {/* Member Contributions & Shares */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Contributions (Who Paid) */}
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-3">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Who Paid (Out of Pocket)
                     </h3>
@@ -196,10 +196,10 @@ export default function MonthlyHistoryPage() {
                       {monthDetail.contributions.map((m) => (
                         <div
                           key={m.member_id}
-                          className="flex items-center justify-between p-2 rounded-xl bg-slate-50 text-xs"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 text-xs"
                         >
                           <span className="font-semibold text-slate-800">{m.member_name}</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="font-bold text-slate-900 tabular-nums">
                             {formatCurrency(m.amount_paid)}{' '}
                             <span className="text-slate-400 font-normal">({m.percentage}%)</span>
                           </span>
@@ -209,7 +209,7 @@ export default function MonthlyHistoryPage() {
                   </div>
 
                   {/* Shares (Who Owed) */}
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-3">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Member Shares (Consumption)
                     </h3>
@@ -217,10 +217,10 @@ export default function MonthlyHistoryPage() {
                       {monthDetail.shares.map((m) => (
                         <div
                           key={m.member_id}
-                          className="flex items-center justify-between p-2 rounded-xl bg-slate-50 text-xs"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 text-xs"
                         >
                           <span className="font-semibold text-slate-800">{m.member_name}</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="font-bold text-slate-900 tabular-nums">
                             {formatCurrency(m.amount_owed)}{' '}
                             <span className="text-slate-400 font-normal">({m.percentage}%)</span>
                           </span>
@@ -231,10 +231,10 @@ export default function MonthlyHistoryPage() {
                 </div>
 
                 {/* Month Expenses List */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Receipt className="w-4 h-4 text-indigo-600" />
+                      <Receipt className="w-4 h-4 text-slate-500" />
                       <h3 className="text-sm font-bold text-slate-900">Expenses for {monthDetail.month_name}</h3>
                     </div>
                     <span className="text-xs text-slate-500 font-semibold">
@@ -250,7 +250,7 @@ export default function MonthlyHistoryPage() {
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">
+                            <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
                               {exp.category?.name}
                             </span>
                             <span className="font-bold text-xs text-slate-900">{exp.description}</span>
@@ -262,7 +262,7 @@ export default function MonthlyHistoryPage() {
                             {exp.billing_period_start && (
                               <>
                                 <span>•</span>
-                                <span className="text-violet-600 font-medium">
+                                <span className="text-slate-500 font-medium">
                                   Billing: {exp.billing_period_start} to {exp.billing_period_end || 'ongoing'}
                                 </span>
                               </>
@@ -271,7 +271,7 @@ export default function MonthlyHistoryPage() {
                         </div>
 
                         <div className="text-right">
-                          <div className="font-extrabold text-sm text-slate-900">
+                          <div className="font-black text-sm text-slate-900 tabular-nums">
                             {formatCurrency(exp.amount)}
                           </div>
                           <div className="text-[11px] text-slate-400 font-medium">

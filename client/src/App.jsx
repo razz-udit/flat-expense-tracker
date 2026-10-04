@@ -21,7 +21,7 @@ function AppContent() {
   if (isLoadingMeta) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white gap-3">
-        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
         <p className="text-sm font-semibold text-slate-300">Loading FlatMatePay...</p>
       </div>
     );

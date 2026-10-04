@@ -97,34 +97,34 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Expenses Ledger</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Expenses Ledger</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Track, filter, edit, and audit all flat expenditures
+            Track, filter, edit, and audit all flat expenditures in real-time
           </p>
         </div>
 
         <button
           onClick={() => openAddExpense()}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
         >
-          <PlusCircle className="w-4 h-4" />
+          <PlusCircle className="w-4 h-4 text-emerald-400" />
           <span>Add Expense</span>
         </button>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
-            <Filter className="w-4 h-4 text-indigo-600" />
+            <Filter className="w-4 h-4 text-slate-500" />
             <span>Filters & Search</span>
           </div>
           {(search || selectedCategory || selectedPaidBy || selectedMemberInSplit || startDate || endDate) && (
             <button
               onClick={handleResetFilters}
-              className="text-xs text-indigo-600 hover:underline font-semibold cursor-pointer"
+              className="text-xs text-slate-500 hover:text-slate-900 font-semibold cursor-pointer underline underline-offset-2"
             >
               Reset Filters
             </button>
@@ -140,7 +140,7 @@ export default function ExpensesPage() {
               placeholder="Search description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+              className="w-full pl-9 pr-3 py-2 text-xs font-medium rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 hover:bg-white transition-colors"
             />
           </div>
 
@@ -149,7 +149,7 @@ export default function ExpensesPage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800"
+              className="w-full px-2.5 py-2 text-xs font-medium rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 hover:bg-white text-slate-800 transition-colors"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -165,7 +165,7 @@ export default function ExpensesPage() {
             <select
               value={selectedPaidBy}
               onChange={(e) => setSelectedPaidBy(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800"
+              className="w-full px-2.5 py-2 text-xs font-medium rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 hover:bg-white text-slate-800 transition-colors"
             >
               <option value="">Paid By: Anyone</option>
               {members.map((m) => (
@@ -181,7 +181,7 @@ export default function ExpensesPage() {
             <select
               value={selectedMemberInSplit}
               onChange={(e) => setSelectedMemberInSplit(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800"
+              className="w-full px-2.5 py-2 text-xs font-medium rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 hover:bg-white text-slate-800 transition-colors"
             >
               <option value="">Participant: Anyone</option>
               {members.map((m) => (
@@ -199,33 +199,33 @@ export default function ExpensesPage() {
               placeholder="From Date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-2 py-1 text-xs rounded-xl border border-slate-300 bg-white text-slate-700"
+              className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 hover:bg-white text-slate-700 transition-colors"
             />
           </div>
         </div>
 
         {/* Filter Summary Stats */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-500">
           <span>
-            Showing <span className="font-bold text-slate-800">{expenses.length}</span> expenses
+            Showing <span className="font-bold text-slate-900">{expenses.length}</span> expenses
           </span>
           <span>
-            Total: <span className="font-extrabold text-indigo-700">{formatCurrency(totalFilteredAmount)}</span>
+            Total: <span className="font-black text-slate-900 tabular-nums text-sm">{formatCurrency(totalFilteredAmount)}</span>
           </span>
         </div>
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
-            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-            <p className="text-xs text-slate-500">Loading expense records...</p>
+            <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+            <p className="text-xs text-slate-500 font-medium">Loading expense records...</p>
           </div>
         ) : expenses.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <Receipt className="w-10 h-10 text-slate-300 mx-auto" />
-            <div className="text-sm font-bold text-slate-700">No Expenses Match Your Criteria</div>
+            <div className="text-sm font-bold text-slate-800">No Expenses Match Your Criteria</div>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
               Try adjusting your search filters or add a new collective expense.
             </p>
@@ -234,14 +234,14 @@ export default function ExpensesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Description</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4">Paid By</th>
-                  <th className="py-3 px-4 text-center">Split</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase tracking-wider">
+                  <th className="py-3.5 px-4">Date</th>
+                  <th className="py-3.5 px-4">Category</th>
+                  <th className="py-3.5 px-4">Description</th>
+                  <th className="py-3.5 px-4 text-right">Amount</th>
+                  <th className="py-3.5 px-4">Paid By</th>
+                  <th className="py-3.5 px-4 text-center">Split</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -252,25 +252,25 @@ export default function ExpensesPage() {
                   const canModify = Boolean(currentUser);
                   return (
                     <React.Fragment key={exp.id}>
-                      <tr className="hover:bg-slate-50/80 transition-colors">
+                      <tr className="hover:bg-slate-50/70 transition-colors">
                         {/* Date */}
-                        <td className="py-3 px-4 text-slate-600 font-medium whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-slate-600 font-medium whitespace-nowrap">
                           {exp.expense_date}
                         </td>
 
                         {/* Category */}
-                        <td className="py-3 px-4">
-                          <span className="inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 whitespace-nowrap">
+                        <td className="py-3.5 px-4">
+                          <span className="inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60 whitespace-nowrap">
                             {exp.category?.name || 'Category'}
                           </span>
                         </td>
 
                         {/* Description & Billing period */}
-                        <td className="py-3 px-4 max-w-xs">
-                          <div className="font-semibold text-slate-900 truncate">{exp.description}</div>
+                        <td className="py-3.5 px-4 max-w-xs">
+                          <div className="font-bold text-slate-900 truncate">{exp.description}</div>
                           {exp.billing_period_start && (
-                            <div className="flex items-center gap-1 text-[11px] text-violet-700 font-medium mt-0.5">
-                              <CalendarRange className="w-3 h-3" />
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-0.5">
+                              <CalendarRange className="w-3 h-3 text-slate-400" />
                               <span>
                                 {exp.billing_period_start} → {exp.billing_period_end || 'ongoing'}
                               </span>
@@ -279,46 +279,46 @@ export default function ExpensesPage() {
                         </td>
 
                         {/* Amount */}
-                        <td className="py-3 px-4 text-right font-extrabold text-slate-900 text-sm whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm whitespace-nowrap tabular-nums">
                           {formatCurrency(exp.amount)}
                         </td>
 
                         {/* Paid By */}
-                        <td className="py-3 px-4 font-semibold text-slate-800 whitespace-nowrap">
+                        <td className="py-3.5 px-4 font-semibold text-slate-800 whitespace-nowrap">
                           {exp.payer?.name || `Member ${exp.paid_by}`}
                           {isPayer && (
-                            <span className="ml-1.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                               You
                             </span>
                           )}
                         </td>
 
                         {/* Split Count & Type */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           <button
                             onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
                           >
-                            <Users className="w-3 h-3 text-indigo-600" />
+                            <Users className="w-3 h-3 text-slate-500" />
                             <span>{exp.splits?.length || 0} members</span>
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </button>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           {canModify ? (
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => openAddExpense(exp)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                                 title="Edit Expense"
                               >
                                 <Edit3 className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => setExpenseToDelete(exp)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 title="Delete Expense"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -340,28 +340,28 @@ export default function ExpensesPage() {
 
                       {/* Expandable Split Details Sub-row */}
                       {isExpanded && (
-                        <tr className="bg-indigo-50/40 border-y border-indigo-100">
+                        <tr className="bg-slate-50/80 border-y border-slate-200/80">
                           <td colSpan={7} className="p-4">
                             <div className="max-w-2xl mx-auto space-y-2">
-                              <div className="flex items-center justify-between text-xs font-bold text-indigo-900 border-b border-indigo-100 pb-1.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-slate-900 border-b border-slate-200/60 pb-1.5">
                                 <span>Split Details ({exp.split_type === 'equal' ? 'Equal Split' : 'Custom Split'})</span>
-                                <span>Expense Total: {formatCurrency(exp.amount)}</span>
+                                <span className="tabular-nums">Expense Total: {formatCurrency(exp.amount)}</span>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 {(exp.splits || []).map((s) => (
                                   <div
                                     key={s.id}
-                                    className="p-2 rounded-lg bg-white border border-indigo-100 flex items-center justify-between text-xs shadow-xs"
+                                    className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between text-xs shadow-2xs"
                                   >
                                     <span className="font-semibold text-slate-800">
                                       {s.member?.name || `Member ${s.member_id}`}
                                     </span>
-                                    <span className="font-bold text-indigo-700">{formatCurrency(s.amount)}</span>
+                                    <span className="font-bold text-emerald-700 tabular-nums">{formatCurrency(s.amount)}</span>
                                   </div>
                                 ))}
                               </div>
                               {exp.notes && (
-                                <p className="text-[11px] text-slate-600 italic mt-1">Note: {exp.notes}</p>
+                                <p className="text-[11px] text-slate-500 italic mt-1">Note: {exp.notes}</p>
                               )}
                             </div>
                           </td>

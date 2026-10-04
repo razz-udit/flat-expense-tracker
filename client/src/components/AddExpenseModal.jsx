@@ -391,16 +391,16 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full my-8 border border-slate-100 overflow-hidden animate-in zoom-in-95">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-5 text-white flex items-center justify-between">
+        <div className="bg-slate-900 p-5 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <Receipt className="w-6 h-6" />
-            <h3 className="font-bold text-lg">
+            <Receipt className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-lg text-white">
               {editingExpense ? 'Edit Flat Expense' : 'Add Collective Expense'}
             </h3>
           </div>
           <button
             onClick={closeAddExpense}
-            className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -422,7 +422,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 Amount (₹) *
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-slate-500 font-bold">₹</span>
+                <span className="absolute left-3 top-2.5 text-slate-400 font-bold">₹</span>
                 <input
                   type="number"
                   step="0.01"
@@ -431,7 +431,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   placeholder="2400.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
+                  className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-bold text-slate-900 text-sm tabular-nums"
                 />
               </div>
             </div>
@@ -450,7 +450,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                         setCustomCategoryInput('');
                       }
                     }}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                    className="text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:underline cursor-pointer"
                   >
                     {isCreatingNewCategory ? 'Select from list' : '+ New Category'}
                   </button>
@@ -464,13 +464,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   placeholder="e.g. WiFi, Grocery, Maid, Milk"
                   value={customCategoryInput}
                   onChange={(e) => setCustomCategoryInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-indigo-300 bg-indigo-50/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-950 placeholder:text-slate-400"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 font-semibold text-slate-900 placeholder:text-slate-400"
                 />
               ) : (
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium text-slate-900 bg-white"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -491,7 +491,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               <select
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-semibold text-slate-900 bg-white"
               >
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -510,7 +510,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 required
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium text-slate-900"
               />
             </div>
           </div>
@@ -526,7 +526,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 )}
               </span>
               {!isDescriptionMandatory && !description.trim() && (
-                <span className="text-[11px] text-indigo-600 font-medium lowercase">
+                <span className="text-[11px] text-slate-500 font-medium lowercase">
                   defaults to "{currentCategoryName || 'Category'}"
                 </span>
               )}
@@ -541,7 +541,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium text-slate-900"
             />
           </div>
 
@@ -550,21 +550,21 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             <button
               type="button"
               onClick={() => setHasBillingPeriod(!hasBillingPeriod)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
             >
-              <CalendarRange className="w-3.5 h-3.5" />
+              <CalendarRange className="w-3.5 h-3.5 text-slate-500" />
               <span>{hasBillingPeriod ? 'Remove Billing Period' : '+ Add Multi-Month Billing Period (e.g. Electricity)'}</span>
             </button>
 
             {hasBillingPeriod && (
-              <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 gap-3">
+              <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Period Start</label>
                   <input
                     type="date"
                     value={billingStart}
                     onChange={(e) => setBillingStart(e.target.value)}
-                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                   />
                 </div>
                 <div>
@@ -573,7 +573,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                     type="date"
                     value={billingEnd}
                     onChange={(e) => setBillingEnd(e.target.value)}
-                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                   />
                 </div>
               </div>
@@ -584,13 +584,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
           <div className="pt-2 border-t border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-indigo-600" />
+                <Users className="w-4 h-4 text-slate-500" />
                 <span>Split Between ({selectedMemberIds.length} Members)</span>
               </label>
               <button
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:underline cursor-pointer"
               >
                 Select All ({members.length})
               </button>
@@ -607,14 +607,14 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                     onClick={() => toggleMemberSelection(m.id)}
                     className={`flex items-center gap-2 p-2 rounded-xl text-left border text-xs font-semibold transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
                   >
                     <div
                       className={`w-4 h-4 rounded-md flex items-center justify-center border ${
                         isSelected
-                          ? 'bg-indigo-600 border-indigo-600 text-white'
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
                           : 'border-slate-300 bg-white'
                       }`}
                     >
@@ -633,7 +633,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 onClick={() => setSplitType('equal')}
                 className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                   splitType === 'equal'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -651,7 +651,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 }}
                 className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                   splitType === 'exact'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -667,7 +667,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 }}
                 className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                   splitType === 'percentage'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -683,7 +683,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 }}
                 className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                   splitType === 'shares'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -694,11 +694,11 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
             {/* Split Mode Content 1: Equal Split */}
             {splitType === 'equal' && (
-              <div className="bg-indigo-50/60 p-3 rounded-xl border border-indigo-100 flex items-center justify-between text-xs mb-3">
-                <span className="font-semibold text-indigo-900">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs mb-3">
+                <span className="font-semibold text-slate-700">
                   Equal share among {numSelected} roommates:
                 </span>
-                <span className="font-extrabold text-indigo-700 text-sm">
+                <span className="font-black text-slate-900 text-sm tabular-nums">
                   ₹{equalSharePerPerson} / person
                 </span>
               </div>
@@ -706,13 +706,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
             {/* Split Mode Content 2: Exact Amounts (₹) */}
             {splitType === 'exact' && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-3">
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700">Enter exact amount per person</span>
                   <button
                     type="button"
                     onClick={handleDistributeEvenlyExact}
-                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
+                    className="text-slate-600 hover:text-slate-900 hover:underline text-[11px] cursor-pointer"
                   >
                     Distribute Evenly
                   </button>
@@ -735,7 +735,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             placeholder="0.00"
                             value={customSplits[mid] || ''}
                             onChange={(e) => setCustomSplits({ ...customSplits, [mid]: e.target.value })}
-                            className="w-full pl-6 pr-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
+                            className="w-full pl-6 pr-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 text-right bg-white"
                           />
                         </div>
                       </div>
@@ -761,13 +761,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
             {/* Split Mode Content 3: By Percentage (%) */}
             {splitType === 'percentage' && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-3">
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700">Enter percentage per person (%)</span>
                   <button
                     type="button"
                     onClick={handleDistributePercentages}
-                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
+                    className="text-slate-600 hover:text-slate-900 hover:underline text-[11px] cursor-pointer"
                   >
                     Distribute Evenly
                   </button>
@@ -797,7 +797,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             placeholder="0"
                             value={percentageSplits[mid] || ''}
                             onChange={(e) => setPercentageSplits({ ...percentageSplits, [mid]: e.target.value })}
-                            className="w-full pr-6 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
+                            className="w-full pr-6 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 text-right bg-white"
                           />
                           <span className="absolute right-2 top-1 text-xs text-slate-400 font-bold">%</span>
                         </div>
@@ -823,13 +823,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
             {/* Split Mode Content 4: By Shares / Parts (x) */}
             {splitType === 'shares' && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-3">
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
                   <span className="text-slate-700">Enter parts/shares per person</span>
                   <button
                     type="button"
                     onClick={handleResetShares}
-                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
+                    className="text-slate-600 hover:text-slate-900 hover:underline text-[11px] cursor-pointer"
                   >
                     Reset to 1 share each
                   </button>
@@ -858,7 +858,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             placeholder="1"
                             value={sharesSplits[mid] || '1'}
                             onChange={(e) => setSharesSplits({ ...sharesSplits, [mid]: e.target.value })}
-                            className="w-full pr-5 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
+                            className="w-full pr-5 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 text-right bg-white"
                           />
                           <span className="absolute right-2 top-1 text-xs text-slate-400 font-bold">x</span>
                         </div>
@@ -869,7 +869,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
                 <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
                   <span>Total Shares: {totalShares}</span>
-                  <span className="text-indigo-700">
+                  <span className="text-slate-900 font-bold">
                     ≈ ₹{amountPerShare} / share
                   </span>
                 </div>
@@ -882,14 +882,14 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             <button
               type="button"
               onClick={closeAddExpense}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-50"
             >
               {isSubmitting ? 'Saving...' : editingExpense ? 'Update Expense' : 'Save Expense'}
             </button>
