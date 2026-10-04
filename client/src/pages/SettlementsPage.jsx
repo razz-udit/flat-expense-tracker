@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
+import { getLocalDateString } from '../utils/date';
 import { 
   ArrowLeftRight, 
   QrCode, 
@@ -124,9 +125,9 @@ export default function SettlementsPage() {
   }, [fetchSettlementData]);
 
   const handleOpenRecordModal = (prefill = null) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
     if (prefill) {
-      setFromMember(prefill.from_member_id || members[0]?.id || '');
+      setFromMember(prefill.from_member_id || currentUser?.id || members[0]?.id || '');
       setToMember(prefill.to_member_id || members[1]?.id || '');
       setAmount(prefill.amount?.toString() || '');
       setPaymentDate(todayStr);
@@ -135,7 +136,7 @@ export default function SettlementsPage() {
       setTransactionReference(prefill.transaction_reference || '');
       setNotes(prefill.notes || '');
     } else {
-      setFromMember(members[0]?.id || '');
+      setFromMember(currentUser?.id || members[0]?.id || '');
       setToMember(members[1]?.id || '');
       setAmount('');
       setPaymentDate(todayStr);
@@ -830,10 +831,10 @@ export default function SettlementsPage() {
                   {paymentsHistory.map((p) => {
                     const isPayer = currentUser && currentUser.id === p.from_member;
                     const isReceiver = currentUser && currentUser.id === p.to_member;
-                    const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
-                    const canVerify = isReceiver || isDefaultAdmin;
-                    const canRevert = isReceiver || isDefaultAdmin;
-                    const canDelete = Boolean(currentUser);
+                    const isDefaultAdmin = Boolean(currentUser?.is_admin);
+                    const canVerify = Boolean(isReceiver || isDefaultAdmin);
+                    const canRevert = Boolean(isReceiver || isDefaultAdmin);
+                    const canDelete = Boolean(currentUser && (isPayer || isReceiver || isDefaultAdmin));
                     return (
                       <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3.5 px-4 text-slate-600 font-medium whitespace-nowrap">

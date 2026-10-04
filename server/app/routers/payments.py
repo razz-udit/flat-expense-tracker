@@ -8,6 +8,7 @@ from app.models.member import Member
 from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentOut
 from app.services.upi_service import generate_upi_link
 from app.dependencies import get_current_user
+from app.services.audit_service import log_audit
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -27,6 +28,7 @@ def get_payments(
     status_filter: Optional[str] = Query(None, alias="status"),
     from_member: Optional[int] = None,
     to_member: Optional[int] = None,
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Payment).options(
@@ -67,6 +69,9 @@ def create_payment(
     if not payer or not receiver:
         raise HTTPException(status_code=400, detail="Invalid payer or receiver member")
 
+    if not payer.is_active or not receiver.is_active:
+        raise HTTPException(status_code=400, detail="Both sender and receiver must be active flat members.")
+
     is_admin = getattr(current_user, "is_admin", False)
     if current_user.id != data.from_member and current_user.id != data.to_member and not is_admin:
         raise HTTPException(
@@ -90,10 +95,17 @@ def create_payment(
     db.add(payment)
     db.commit()
     db.refresh(payment)
+
+    log_audit(db, "payment.created", member_id=current_user.id, details={"payment_id": payment.id, "amount": str(payment.amount)})
+
     return attach_upi_link(payment)
 
 @router.get("/{payment_id}", response_model=PaymentOut)
-def get_payment(payment_id: int, db: Session = Depends(get_db)):
+def get_payment(
+    payment_id: int, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     payment = db.query(Payment).options(
         joinedload(Payment.payer),
         joinedload(Payment.receiver)
@@ -142,6 +154,9 @@ def update_payment(
 
     db.commit()
     db.refresh(payment)
+
+    log_audit(db, "payment.updated", member_id=current_user.id, details={"payment_id": payment.id})
+
     return attach_upi_link(payment)
 
 @router.post("/{payment_id}/verify", response_model=PaymentOut)
@@ -169,6 +184,9 @@ def verify_payment(
     payment.verified_at = datetime.now()
     db.commit()
     db.refresh(payment)
+
+    log_audit(db, "payment.verified", member_id=current_user.id, details={"payment_id": payment.id})
+
     return attach_upi_link(payment)
 
 @router.delete("/{payment_id}")
@@ -187,6 +205,8 @@ def delete_payment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied: Only the sender, receiver, or flat admin can delete this settlement record."
         )
+
+    log_audit(db, "payment.deleted", member_id=current_user.id, details={"payment_id": payment.id, "amount": str(payment.amount)})
 
     db.delete(payment)
     db.commit()

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
+import { getLocalDateString } from '../utils/date';
 import { 
   Building2, 
   Wallet, 
@@ -76,7 +77,7 @@ export default function DashboardPage() {
       return;
     }
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateString();
       await api.createPayment({
         from_member: settlement.from_member_id,
         to_member: settlement.to_member_id,

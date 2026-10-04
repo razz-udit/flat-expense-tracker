@@ -23,11 +23,16 @@ from app.schemas.payment import PaymentOut
 from app.routers.payments import attach_upi_link
 from app.services.upi_service import generate_upi_link
 from app.dependencies import get_current_user
+from app.services.audit_service import log_audit
 
 router = APIRouter(prefix="/api/categories", tags=["Categories"])
 
 @router.get("", response_model=List[CategoryOut])
-def get_categories(include_inactive: bool = False, db: Session = Depends(get_db)):
+def get_categories(
+    include_inactive: bool = False, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     query = db.query(Category)
     if not include_inactive:
         query = query.filter(Category.is_active == True)
@@ -48,6 +53,7 @@ def create_category(
             existing.monthly_budget_per_member = data.monthly_budget_per_member
             db.commit()
             db.refresh(existing)
+            log_audit(db, "category.reactivated", member_id=current_user.id, details={"category_id": existing.id, "name": existing.name})
             return existing
         raise HTTPException(status_code=400, detail=f"Category '{clean_name}' already exists")
 
@@ -60,12 +66,16 @@ def create_category(
     db.add(category)
     db.commit()
     db.refresh(category)
+
+    log_audit(db, "category.created", member_id=current_user.id, details={"category_id": category.id, "name": category.name})
+
     return category
 
 @router.get("/budget-status", response_model=List[CategoryBudgetStatus])
 def get_categories_budget_status(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     today = date.today()
@@ -188,6 +198,22 @@ def get_categories_budget_status(
             if c["surplus"] <= Decimal("0.01"):
                 ci += 1
 
+        # Calculate budget alert flags
+        alert_status = None
+        pct_used = None
+        rem_budget = None
+        exc_amount = None
+        if total_budget and total_budget > Decimal("0.00"):
+            pct_used = float(round((total_spent / total_budget) * Decimal("100"), 1))
+            rem_budget = max(Decimal("0.00"), total_budget - total_spent)
+            exc_amount = max(Decimal("0.00"), total_spent - total_budget)
+            if pct_used >= 100.0:
+                alert_status = "exceeded"
+            elif pct_used >= 80.0:
+                alert_status = "warning"
+            else:
+                alert_status = "normal"
+
         results.append(CategoryBudgetStatus(
             category_id=cat.id,
             category_name=cat.name,
@@ -196,7 +222,11 @@ def get_categories_budget_status(
             total_spent=total_spent,
             members_count=members_count,
             member_contributions=member_contribs,
-            equalization_transfers=equalization_transfers
+            equalization_transfers=equalization_transfers,
+            budget_alert_status=alert_status,
+            percentage_used=pct_used,
+            exceeded_amount=exc_amount,
+            remaining_budget=rem_budget
         ))
 
     return results
@@ -220,6 +250,9 @@ def equalize_budget(
     receiver = db.query(Member).filter(Member.id == data.to_member_id).first()
     if not payer or not receiver:
         raise HTTPException(status_code=400, detail="Invalid payer or receiver")
+
+    if not payer.is_active or not receiver.is_active:
+        raise HTTPException(status_code=400, detail="Both payer and receiver must be active flat members.")
 
     is_admin = getattr(current_user, "is_admin", False)
     if current_user.id != data.from_member_id and current_user.id != data.to_member_id and not is_admin:
@@ -245,6 +278,9 @@ def equalize_budget(
     db.add(payment)
     db.commit()
     db.refresh(payment)
+
+    log_audit(db, "budget.equalize", member_id=current_user.id, details={"payment_id": payment.id, "category_id": cat.id, "amount": str(payment.amount)})
+
     return attach_upi_link(payment)
 
 @router.put("/{category_id}", response_model=CategoryOut)
@@ -276,6 +312,9 @@ def update_category(
 
     db.commit()
     db.refresh(category)
+
+    log_audit(db, "category.updated", member_id=current_user.id, details={"category_id": category.id})
+
     return category
 
 @router.delete("/{category_id}")
@@ -290,6 +329,8 @@ def delete_category(
 
     has_expenses = db.query(Expense).filter(Expense.category_id == category_id).count() > 0
     has_recurring = db.query(RecurringExpense).filter(RecurringExpense.category_id == category_id).count() > 0
+
+    log_audit(db, "category.deleted", member_id=current_user.id, details={"category_id": category.id, "soft_deleted": (has_expenses or has_recurring)})
 
     if has_expenses or has_recurring:
         category.is_active = False

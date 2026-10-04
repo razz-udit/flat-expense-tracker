@@ -18,6 +18,12 @@ class Expense(Base):
     payment_method = Column(String(50), default="UPI", nullable=False)
     verification_status = Column(String(50), default="Pending Confirmation", nullable=False)
     confirmed_by = Column(Text, nullable=True)
+    disputed_by = Column(Integer, ForeignKey("members.id", ondelete="SET NULL"), nullable=True)
+    dispute_reason = Column(Text, nullable=True)
+    disputed_at = Column(DateTime, nullable=True)
+    resolved_by = Column(Integer, ForeignKey("members.id", ondelete="SET NULL"), nullable=True)
+    resolution_notes = Column(Text, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
     split_type = Column(String(20), default="equal", nullable=False) # "equal", "custom", "percentage", "shares"
     recurring_id = Column(Integer, ForeignKey("recurring_expenses.id", ondelete="SET NULL"), nullable=True, index=True)
     notes = Column(Text, nullable=True)

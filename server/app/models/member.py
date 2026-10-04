@@ -18,6 +18,8 @@ class Member(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
     token_version = Column(Integer, default=1, nullable=False)
+    claim_token_hash = Column(String(255), nullable=True)
+    claim_token_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     expenses_paid = relationship("Expense", back_populates="payer", foreign_keys="Expense.paid_by")

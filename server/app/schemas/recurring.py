@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, List, Any
 import json
@@ -11,9 +11,12 @@ class RecurringBase(BaseModel):
     category_id: int
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     paid_by: int
-    split_type: str = Field("equal", pattern="^(equal|custom)$")
+    split_type: str = Field("equal", pattern="^(equal|custom|percentage|shares)$")
     split_members: Optional[List[int]] = None
-    frequency: str = Field("Monthly", max_length=50)
+    custom_splits: Optional[List[dict]] = None
+    frequency: str = Field("Monthly", pattern="^(Monthly|Bi-Monthly|Quarterly|As Required)$")
+    start_date: Optional[date] = None
+    next_due_date: Optional[date] = None
     notes: Optional[str] = None
     is_active: bool = True
 
@@ -25,9 +28,12 @@ class RecurringUpdate(BaseModel):
     category_id: Optional[int] = None
     amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
     paid_by: Optional[int] = None
-    split_type: Optional[str] = Field(None, pattern="^(equal|custom)$")
+    split_type: Optional[str] = Field(None, pattern="^(equal|custom|percentage|shares)$")
     split_members: Optional[List[int]] = None
-    frequency: Optional[str] = None
+    custom_splits: Optional[List[dict]] = None
+    frequency: Optional[str] = Field(None, pattern="^(Monthly|Bi-Monthly|Quarterly|As Required)$")
+    start_date: Optional[date] = None
+    next_due_date: Optional[date] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -40,7 +46,10 @@ class RecurringOut(BaseModel):
     split_type: str
     split_members: Optional[List[int]] = None
     frequency: str
-    notes: Optional[str]
+    start_date: Optional[date] = None
+    next_due_date: Optional[date] = None
+    last_generated_period: Optional[str] = None
+    notes: Optional[str] = None
     is_active: bool
     created_at: datetime
     
@@ -52,6 +61,8 @@ class RecurringOut(BaseModel):
     @classmethod
     def parse_split_members_field(cls, v):
         if isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                return [d["member_id"] for d in v if "member_id" in d]
             return v
         if isinstance(v, str):
             v_str = v.strip()
@@ -59,7 +70,11 @@ class RecurringOut(BaseModel):
                 return []
             if v_str.startswith("["):
                 try:
-                    return json.loads(v_str)
+                    data = json.loads(v_str)
+                    if isinstance(data, list):
+                        if data and isinstance(data[0], dict):
+                            return [d["member_id"] for d in data if "member_id" in d]
+                        return data
                 except Exception:
                     pass
             return [int(x.strip()) for x in v_str.split(",") if x.strip().isdigit()]

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
+import { getLocalDateString } from '../utils/date';
 import { 
   X, 
   QrCode, 
@@ -51,7 +52,7 @@ export default function UpiPayModal({ onPaymentDone }) {
     e.preventDefault();
     try {
       setIsSubmitting(true);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateString();
       const finalNote = customNote.trim() || notes || `Settlement from ${fromMemberName || 'Flatmate'} to ${toMemberName}`;
 
       if (paymentId) {

@@ -13,7 +13,12 @@ import {
   AlertTriangle, 
   Lock, 
   KeyRound, 
-  ShieldCheck 
+  ShieldCheck,
+  Download,
+  Copy,
+  LogOut,
+  FileText,
+  Activity
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -86,6 +91,67 @@ export default function SettingsPage() {
   const [customFlatSize, setCustomFlatSize] = useState(6);
   const [flatMembersDraft, setFlatMembersDraft] = useState([]);
   const [isSavingFlatSize, setIsSavingFlatSize] = useState(false);
+
+  // One-time invite / claim token modal state
+  const [inviteModalInfo, setInviteModalInfo] = useState(null); // { member, token, expires_at }
+
+  // Leave Flat Preview modal state
+  const [leavePreviewInfo, setLeavePreviewInfo] = useState(null); // { member, preview, isLeaving }
+
+  // Audit Logs modal state
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+
+  const handleGenerateInviteToken = async (m) => {
+    try {
+      const res = await api.generateInvite(m.id);
+      setInviteModalInfo({ member: m, token: res.invite_token, expires_at: res.expires_at });
+      addToast(`One-time invite token generated for ${m.name}!`, 'success');
+    } catch (err) {
+      console.error('Generate invite error:', err);
+      addToast(err.message || 'Failed to generate invite token', 'error');
+    }
+  };
+
+  const handleOpenLeavePreview = async (m) => {
+    try {
+      const preview = await api.getLeavePreview(m.id);
+      setLeavePreviewInfo({ member: m, preview, isLeaving: false });
+    } catch (err) {
+      console.error('Leave preview error:', err);
+      addToast(err.message || 'Failed to load leave preview', 'error');
+    }
+  };
+
+  const handleConfirmLeave = async () => {
+    if (!leavePreviewInfo?.member) return;
+    try {
+      setLeavePreviewInfo((prev) => ({ ...prev, isLeaving: true }));
+      const res = await api.leaveFlat(leavePreviewInfo.member.id);
+      addToast(res.message || `${leavePreviewInfo.member.name} has left the flat.`, 'info');
+      setLeavePreviewInfo(null);
+      refreshMeta();
+    } catch (err) {
+      console.error('Leave flat error:', err);
+      addToast(err.message || 'Failed to leave flat', 'error');
+      setLeavePreviewInfo((prev) => ({ ...prev, isLeaving: false }));
+    }
+  };
+
+  const handleOpenAuditModal = async () => {
+    setIsAuditModalOpen(true);
+    setIsLoadingAudit(true);
+    try {
+      const logs = await api.getAuditLogs({ limit: 50 });
+      setAuditLogs(logs || []);
+    } catch (err) {
+      console.error('Audit logs error:', err);
+      addToast(err.message || 'Failed to load audit logs', 'error');
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
 
   const handleFlatSizeChange = (newSize) => {
     const size = Math.max(2, Math.min(20, newSize));
@@ -479,7 +545,14 @@ export default function SettingsPage() {
                             {m.name.charAt(0)}
                           </div>
                           <div>
-                            <div className="font-bold text-sm text-slate-900">{m.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-slate-900">{m.name}</span>
+                              {m.is_admin && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                               {m.upi_id ? (
                                 <span className="font-mono text-slate-700 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-md text-[11px] font-semibold">
@@ -493,7 +566,27 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          {canManageMembers && (
+                            <button
+                              onClick={() => handleGenerateInviteToken(m)}
+                              className="px-2.5 py-1 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer transition-colors text-xs font-semibold flex items-center gap-1 border border-slate-200"
+                              title="Generate One-Time Claim Token"
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Invite</span>
+                            </button>
+                          )}
+                          {(canManageMembers || (currentUser && m.id === currentUser.id)) && (
+                            <button
+                              onClick={() => handleOpenLeavePreview(m)}
+                              className="px-2.5 py-1 text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors text-xs font-semibold flex items-center gap-1 border border-slate-200"
+                              title="Leave Flat Preview & Settlement Status"
+                            >
+                              <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Leave</span>
+                            </button>
+                          )}
                           {(canManageMembers || (currentUser && m.id === currentUser.id)) && (
                             <button
                               onClick={() => startEditMember(m)}
@@ -763,7 +856,7 @@ export default function SettingsPage() {
               <ShieldCheck className="w-8 h-8 text-slate-400" />
               <h4 className="font-bold text-xs text-slate-700">Flat Password Administration</h4>
               <p className="text-xs text-slate-500 max-w-xs">
-                Need your password reset? Ask your Flat Admin ({members[0]?.name || 'Admin'}) to reset it for you.
+                Need your password reset? Ask your Flat Admin ({members.find((m) => m.is_admin)?.name || 'Admin'}) to reset it for you.
               </p>
             </div>
           )}
@@ -798,6 +891,73 @@ export default function SettingsPage() {
               </span>
             </div>
           </div>
+
+          {/* CSV Export Card */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center gap-2 text-slate-800">
+              <FileText className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-sm text-slate-900">Export Flat Expenses (CSV)</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Export all flat expenses, dates, descriptions, payment methods, verification statuses, and member splits into a clean CSV spreadsheet.
+            </p>
+            <div className="pt-1">
+              <a
+                href={api.getExportExpensesCsvUrl()}
+                download="flatmatepay_expenses.csv"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Download Expenses CSV</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Database Backup Card (Admin only) */}
+          {canManageMembers && (
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2 text-slate-800">
+                <Database className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-sm text-slate-900">Flat Database Backup</h3>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Download a complete, authoritative backup snapshot of your flat's SQLite database file for offline preservation or disaster recovery.
+              </p>
+              <div className="pt-1">
+                <a
+                  href={api.getAdminBackupUrl()}
+                  download="flatmatepay_backup.db"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-indigo-200" />
+                  <span>Download DB Backup (.db)</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Audit Logs Card (Admin only) */}
+          {canManageMembers && (
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2 text-slate-800">
+                <Activity className="w-5 h-5 text-amber-600" />
+                <h3 className="font-bold text-sm text-slate-900">System Audit Trail</h3>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Inspect immutable system audit logs recording expense creation, edits, deletions, dispute resolutions, and roommate authentication events.
+              </p>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleOpenAuditModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>View System Audit Logs</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Reset Database Card */}
           <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-xs space-y-3">
@@ -1195,6 +1355,220 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Invite Token Modal */}
+      {inviteModalInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-100 animate-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <KeyRound className="w-5 h-5" />
+                <h3 className="font-bold text-base text-slate-900">One-Time Invite Token</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInviteModalInfo(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Share this secret invite token with <span className="font-bold text-slate-900">{inviteModalInfo.member.name}</span>.
+              They can use it to claim their account and set their password securely.
+            </p>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Claim Token (Expires in 48h)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteModalInfo.token}
+                  className="w-full text-xs font-mono py-2 px-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(inviteModalInfo.token);
+                    addToast('Claim token copied to clipboard!', 'success');
+                  }}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white cursor-pointer shadow-xs"
+                  title="Copy Token"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Direct Claim Link
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/login?claim=${inviteModalInfo.token}`}
+                  className="w-full text-xs font-mono py-2 px-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 truncate"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/login?claim=${inviteModalInfo.token}`);
+                    addToast('Direct claim link copied to clipboard!', 'success');
+                  }}
+                  className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs"
+                  title="Copy Direct Link"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setInviteModalInfo(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Flat Preview Modal */}
+      {leavePreviewInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-100 animate-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-rose-600">
+                <LogOut className="w-5 h-5" />
+                <h3 className="font-bold text-base text-slate-900">
+                  Leave Flat: {leavePreviewInfo.member.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLeavePreviewInfo(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600">
+                Leaving the flat deactivates the member account, pauses their active recurring expenses, and releases admin responsibilities safely.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-slate-500 font-bold block text-[10px] uppercase">Debts Owed</span>
+                  <span className="text-sm font-extrabold text-rose-600 tabular-nums">
+                    ₹{parseFloat(leavePreviewInfo.preview?.debts_owed || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-slate-500 font-bold block text-[10px] uppercase">Credits Due</span>
+                  <span className="text-sm font-extrabold text-emerald-600 tabular-nums">
+                    ₹{parseFloat(leavePreviewInfo.preview?.credits_due || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {leavePreviewInfo.preview?.active_recurring_expenses > 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{leavePreviewInfo.preview.active_recurring_expenses} recurring expense templates will be automatically paused.</span>
+                </div>
+              )}
+
+              {leavePreviewInfo.preview?.unresolved_disputes > 0 && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{leavePreviewInfo.preview.unresolved_disputes} unresolved disputes involve this roommate.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setLeavePreviewInfo(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={leavePreviewInfo.isLeaving}
+                onClick={handleConfirmLeave}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+              >
+                {leavePreviewInfo.isLeaving ? 'Processing...' : 'Confirm Leave Flat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Audit Trail Modal */}
+      {isAuditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 border border-slate-100 animate-in zoom-in-95 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2 text-amber-600">
+                <Activity className="w-5 h-5" />
+                <h3 className="font-bold text-base text-slate-900">System Audit Trail</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 text-xs">
+              {isLoadingAudit ? (
+                <div className="py-8 text-center text-slate-400">Loading audit records...</div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-8 text-center text-slate-400">No audit records found.</div>
+              ) : (
+                auditLogs.map((log) => (
+                  <div key={log.id} className="py-2.5 flex items-start justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-800">{log.action}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">
+                        {log.details ? JSON.stringify(log.details) : '—'}
+                      </div>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-400 whitespace-nowrap shrink-0">
+                      {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

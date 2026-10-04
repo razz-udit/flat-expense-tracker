@@ -133,7 +133,7 @@ export default function ExpensesPage() {
     try {
       setIsSubmittingEvaluation(true);
       const reason = disputeReason.trim() || 'Suspected false expense claim';
-      await api.evaluateExpense(disputeModalExpense.id, 'dispute', reason, currentUser?.id);
+      await api.disputeExpense(disputeModalExpense.id, reason);
       addToast('Expense flagged as disputed for roommates review.', 'info');
       setDisputeModalExpense(null);
       setDisputeReason('');
@@ -142,6 +142,26 @@ export default function ExpensesPage() {
     } catch (err) {
       console.error('Dispute error:', err);
       addToast(err.message || 'Failed to dispute expense', 'error');
+    } finally {
+      setIsSubmittingEvaluation(false);
+    }
+  };
+
+  const handleResolveDispute = async (exp, action) => {
+    try {
+      setIsSubmittingEvaluation(true);
+      if (action === 'cancel') {
+        await api.resolveDispute(exp.id, 'cancel', 'Dispute upheld: expense deleted');
+        addToast('Dispute resolved: expense removed.', 'info');
+      } else {
+        await api.resolveDispute(exp.id, 'confirm', 'Dispute cleared: expense verified');
+        addToast('Dispute resolved: expense confirmed! ✓', 'success');
+      }
+      fetchExpenses();
+      if (refreshMeta) refreshMeta();
+    } catch (err) {
+      console.error('Resolve dispute error:', err);
+      addToast(err.message || 'Failed to resolve dispute', 'error');
     } finally {
       setIsSubmittingEvaluation(false);
     }
@@ -361,7 +381,7 @@ export default function ExpensesPage() {
                 {expenses.map((exp) => {
                   const isExpanded = expandedExpenseId === exp.id;
                   const isPayer = Boolean(currentUser && exp.paid_by === currentUser.id);
-                  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
+                  const isDefaultAdmin = Boolean(currentUser?.is_admin);
                   const canModify = Boolean(currentUser && (isPayer || isDefaultAdmin));
 
                   const isConfirmed = exp.verification_status === 'Confirmed';
@@ -577,11 +597,33 @@ export default function ExpensesPage() {
                               {isDisputed && (
                                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
                                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                                  <div className="space-y-1">
+                                  <div className="space-y-1.5 flex-1">
                                     <span className="font-bold">Roommate Dispute Notice:</span>
                                     <p className="text-rose-700 whitespace-pre-line leading-relaxed">
-                                      This expense was flagged by a flatmate as potentially false or incorrect. Roommates can review the screenshot proof and adjust if necessary.
+                                      {exp.dispute_reason
+                                        ? `Dispute reason: "${exp.dispute_reason}"`
+                                        : 'This expense was flagged by a flatmate as potentially false or incorrect. Roommates can review the screenshot proof and adjust if necessary.'}
                                     </p>
+                                    {(isPayer || isDefaultAdmin) && (
+                                      <div className="flex items-center gap-2 pt-1.5">
+                                        <button
+                                          type="button"
+                                          disabled={isSubmittingEvaluation}
+                                          onClick={() => handleResolveDispute(exp, 'confirm')}
+                                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs cursor-pointer disabled:opacity-50"
+                                        >
+                                          Confirm &amp; Resolve
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isSubmittingEvaluation}
+                                          onClick={() => handleResolveDispute(exp, 'cancel')}
+                                          className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] shadow-xs cursor-pointer disabled:opacity-50"
+                                        >
+                                          Delete Disputed Expense
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -607,17 +649,23 @@ export default function ExpensesPage() {
                                   <div className="flex items-center gap-2">
                                     <button
                                       type="button"
-                                      onClick={() => setReceiptModalUrl(getReceiptFullUrl(exp.receipt_url))}
+                                      onClick={() => setReceiptModalUrl(getReceiptFullUrl(exp.receipt_url, exp.id))}
                                       className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 hover:border-slate-400 bg-white cursor-pointer group transition-all"
                                     >
-                                      <img
-                                        src={getReceiptFullUrl(exp.receipt_url)}
-                                        alt="Receipt Proof"
-                                        className="w-10 h-10 object-cover rounded-lg border border-slate-100"
-                                      />
+                                      {exp.receipt_url.toLowerCase().endsWith('.pdf') ? (
+                                        <div className="w-10 h-10 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 font-black text-xs">
+                                          PDF
+                                        </div>
+                                      ) : (
+                                        <img
+                                          src={getReceiptFullUrl(exp.receipt_url, exp.id)}
+                                          alt="Receipt Proof"
+                                          className="w-10 h-10 object-cover rounded-lg border border-slate-100"
+                                        />
+                                      )}
                                       <div className="text-left pr-2">
                                         <div className="text-[11px] font-bold text-slate-800 group-hover:text-emerald-700 flex items-center gap-1">
-                                          <Eye className="w-3 h-3" /> View Full Screenshot Proof
+                                          <Eye className="w-3 h-3" /> View Full Proof Document
                                         </div>
                                         <div className="text-[10px] text-slate-500">Payment receipt verified</div>
                                       </div>
@@ -713,12 +761,29 @@ export default function ExpensesPage() {
               </button>
             </div>
 
-            <div className="bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center max-h-[70vh] border border-slate-200">
-              <img
-                src={receiptModalUrl}
-                alt="Payment proof screenshot"
-                className="object-contain w-full h-auto max-h-[68vh] rounded-xl"
-              />
+            <div className="bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center max-h-[70vh] border border-slate-200 p-2">
+              {receiptModalUrl.toLowerCase().includes('.pdf') ? (
+                <div className="p-8 text-center space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto font-black text-lg">
+                    PDF
+                  </div>
+                  <p className="font-bold text-sm text-slate-800">PDF Receipt Document</p>
+                  <a
+                    href={receiptModalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs"
+                  >
+                    <ExternalLink className="w-4 h-4" /> View / Download PDF in New Tab
+                  </a>
+                </div>
+              ) : (
+                <img
+                  src={receiptModalUrl}
+                  alt="Payment proof screenshot"
+                  className="object-contain w-full h-auto max-h-[68vh] rounded-xl"
+                />
+              )}
             </div>
 
             <div className="flex items-center justify-between pt-1 text-xs">
@@ -729,7 +794,7 @@ export default function ExpensesPage() {
                 className="flex items-center gap-1.5 font-bold text-slate-700 hover:text-slate-900 hover:underline"
               >
                 <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                <span>Open full image in new tab</span>
+                <span>Open in new tab</span>
               </a>
               <button
                 type="button"

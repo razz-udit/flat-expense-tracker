@@ -47,6 +47,10 @@ class CategoryBudgetStatus(BaseModel):
     monthly_budget_per_member: Optional[Decimal] = None
     total_budget: Optional[Decimal] = None
     total_spent: Decimal
+    remaining_budget: Optional[Decimal] = None
+    percentage_used: Optional[Decimal] = None
+    exceeded_amount: Optional[Decimal] = None
+    budget_alert_status: str = "normal" # "normal" (<80%), "warning" (80-99%), "exceeded" (>=100%)
     members_count: int
     member_contributions: List[MemberBudgetContribution]
     equalization_transfers: List[BudgetEqualizationTransfer]

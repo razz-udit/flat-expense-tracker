@@ -177,12 +177,38 @@ export function AppProvider({ children }) {
     throw new Error(res.message || 'Google sign-in failed');
   };
 
+  const claimAccountAndLogin = async (token, newPassword) => {
+    const res = await api.claimAccount(token, newPassword);
+    if (res.success && res.member) {
+      await refreshMeta();
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      if (res.token) {
+        localStorage.setItem('flat_auth_token', res.token);
+      }
+      return res.member;
+    }
+    throw new Error(res.message || 'Failed to claim account');
+  };
+
   const logout = () => {
     setActiveMemberId(null);
     localStorage.removeItem('flat_current_user_id');
     localStorage.removeItem('flat_active_member_id');
     localStorage.removeItem('flat_auth_token');
   };
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+      addToast('Session expired. Please sign in again.', 'error');
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('flat_unauthorized', handleUnauthorized);
+      return () => window.removeEventListener('flat_unauthorized', handleUnauthorized);
+    }
+  }, [addToast]);
 
   const openAddExpense = (expenseToEdit = null) => {
     setEditingExpense(expenseToEdit);
@@ -330,6 +356,7 @@ export function AppProvider({ children }) {
         login,
         loginWithGoogle,
         loginWithCredentials,
+        claimAccountAndLogin,
         setPasswordAndLogin,
         signupAndLogin,
         logout,

@@ -50,6 +50,8 @@ env.example
 # Uploaded receipts / screenshots
 uploads/*
 !uploads/.gitkeep
+server/uploads/*
+!server/uploads/.gitkeep
 
 
 # IDE & OS

@@ -46,6 +46,35 @@ async def lifespan(app: FastAPI):
                 if "recurring_id" not in e_cols:
                     conn.execute(text("ALTER TABLE expenses ADD COLUMN recurring_id INTEGER;"))
 
+                if "claim_token_hash" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN claim_token_hash VARCHAR(255);"))
+                if "claim_token_expires_at" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN claim_token_expires_at DATETIME;"))
+
+                e_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(expenses);")).fetchall()]
+                if "receipt_url" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN receipt_url TEXT;"))
+                if "payment_method" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(50) DEFAULT 'UPI';"))
+                if "verification_status" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN verification_status VARCHAR(50) DEFAULT 'Pending Confirmation';"))
+                if "confirmed_by" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN confirmed_by TEXT;"))
+                if "recurring_id" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN recurring_id INTEGER;"))
+                if "disputed_by" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN disputed_by INTEGER;"))
+                if "dispute_reason" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN dispute_reason TEXT;"))
+                if "disputed_at" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN disputed_at DATETIME;"))
+                if "resolved_by" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN resolved_by INTEGER;"))
+                if "resolution_notes" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN resolution_notes TEXT;"))
+                if "resolved_at" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN resolved_at DATETIME;"))
+
                 s_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(expense_splits);")).fetchall()]
                 if "shares" not in s_cols:
                     conn.execute(text("ALTER TABLE expense_splits ADD COLUMN shares NUMERIC(10, 2);"))
@@ -55,19 +84,33 @@ async def lifespan(app: FastAPI):
                 r_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(recurring_expenses);")).fetchall()]
                 if "last_generated_period" not in r_cols:
                     conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN last_generated_period VARCHAR(20);"))
+                if "start_date" not in r_cols:
+                    conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN start_date DATE;"))
+                if "next_due_date" not in r_cols:
+                    conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN next_due_date DATE;"))
             else:
                 conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id VARCHAR(100);"))
                 conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);"))
                 conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE NOT NULL;"))
                 conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 1 NOT NULL;"))
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS claim_token_hash VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS claim_token_expires_at TIMESTAMP;"))
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;"))
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'UPI';"))
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Pending Confirmation';"))
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS confirmed_by TEXT;"))
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurring_id INTEGER;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS disputed_by INTEGER;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS dispute_reason TEXT;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS disputed_at TIMESTAMP;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS resolved_by INTEGER;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS resolution_notes TEXT;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP;"))
                 conn.execute(text("ALTER TABLE expense_splits ADD COLUMN IF NOT EXISTS shares NUMERIC(10, 2);"))
                 conn.execute(text("ALTER TABLE expense_splits ADD COLUMN IF NOT EXISTS percentage NUMERIC(5, 2);"))
                 conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS last_generated_period VARCHAR(20);"))
+                conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS start_date DATE;"))
+                conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS next_due_date DATE;"))
             conn.commit()
 
             # Ensure at least one admin exists if members are present
@@ -83,7 +126,10 @@ async def lifespan(app: FastAPI):
             finally:
                 db_session.close()
     except Exception as e:
-        print(f"Database migration notice: {e}")
+        import logging
+        logging.getLogger("uvicorn.error").error(f"Database migration failure: {e}")
+        if settings.APP_ENV == "production":
+            raise RuntimeError(f"FATAL: Production database migration failed: {e}")
     # Seed default members and categories if table is fresh
     db = SessionLocal()
     try:
@@ -106,7 +152,6 @@ has_wildcard = "*" in cors_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if has_wildcard else cors_origins,
-    allow_origin_regex=r"https://.*\.onrender\.com|https://.*\.loca\.lt" if not has_wildcard else None,
     allow_credentials=not has_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],

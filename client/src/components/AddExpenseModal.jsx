@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock, Equal, Percent, Hash, Upload, Image, Banknote, QrCode, Sparkles } from 'lucide-react';
+import { getLocalDateString } from '../utils/date';
 
 export default function AddExpenseModal({ onExpenseSaved }) {
   const {
@@ -51,7 +52,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
 
     if (editingExpense) {
       setCategoryId(editingExpense.category_id ? editingExpense.category_id.toString() : '');

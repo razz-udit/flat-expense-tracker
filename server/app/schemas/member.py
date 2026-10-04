@@ -25,6 +25,9 @@ class MemberOut(MemberBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+from decimal import Decimal
+from pydantic import model_validator
+
 class MemberConfigItem(BaseModel):
     id: Optional[int] = None
     name: str = Field(..., min_length=1, max_length=100)
@@ -34,3 +37,25 @@ class MemberConfigItem(BaseModel):
 class ConfigureFlatSizeRequest(BaseModel):
     count: int = Field(..., ge=2, le=30)
     members: Optional[list[MemberConfigItem]] = None
+
+    @model_validator(mode="after")
+    def validate_count_matches(self):
+        if self.members and len(self.members) != self.count:
+            raise ValueError(
+                f"Validation error: The provided member list has {len(self.members)} items, but requested flat count is {self.count}. They must match exactly."
+            )
+        return self
+
+class LeavePreviewResponse(BaseModel):
+    member_id: int
+    member_name: str
+    net_balance: Decimal
+    amount_owed: Decimal = Decimal("0.00")
+    amount_receivable: Decimal = Decimal("0.00")
+    active_recurring_count: int = 0
+    unresolved_disputes_count: int = 0
+    can_leave_cleanly: bool = True
+    can_leave: Optional[bool] = True
+    outstanding_debts: Optional[Decimal] = Decimal("0.00")
+    outstanding_credits: Optional[Decimal] = Decimal("0.00")
+    message: str

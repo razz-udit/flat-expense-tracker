@@ -113,6 +113,13 @@ class ExpenseEvaluationInput(BaseModel):
     action: str = Field(..., pattern="^(confirm|dispute)$")
     notes: Optional[str] = None
 
+class DisputeExpenseRequest(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=500, description="Reason for disputing this expense")
+
+class ResolveDisputeRequest(BaseModel):
+    action: str = Field(..., pattern="^(confirm|cancel|delete)$", description="'confirm' keeps expense, 'cancel' or 'delete' voids/deletes expense")
+    resolution_notes: str = Field(..., min_length=2, max_length=500)
+
 class ExpenseOut(BaseModel):
     id: int
     category_id: int
@@ -126,6 +133,12 @@ class ExpenseOut(BaseModel):
     payment_method: Optional[str] = "UPI"
     verification_status: Optional[str] = "Pending Confirmation"
     confirmed_by: Optional[str] = None
+    disputed_by: Optional[int] = None
+    dispute_reason: Optional[str] = None
+    disputed_at: Optional[datetime] = None
+    resolved_by: Optional[int] = None
+    resolution_notes: Optional[str] = None
+    resolved_at: Optional[datetime] = None
     split_type: str
     recurring_id: Optional[int] = None
     notes: Optional[str] = None

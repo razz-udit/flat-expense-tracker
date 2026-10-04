@@ -40,3 +40,15 @@ class AdminResetPasswordRequest(BaseModel):
     admin_password: str
     target_member_id: int
     new_password: str = Field(..., min_length=4, max_length=100)
+
+class ClaimAccountRequest(BaseModel):
+    token: str = Field(..., min_length=16, description="Cryptographic one-time invite token")
+    password: str = Field(..., min_length=4, max_length=100)
+
+class InviteTokenResponse(BaseModel):
+    member_id: int
+    member_name: str
+    claim_token: str
+    claim_url: str
+    expires_at: str
+

@@ -9,7 +9,11 @@ import {
   ArrowRight, 
   Download, 
   Settings,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  KeyRound,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 
 function GoogleLogo({ className = "w-5 h-5" }) {
@@ -37,11 +41,24 @@ function GoogleLogo({ className = "w-5 h-5" }) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { loginWithGoogle, addToast, promptInstall, currentUser } = useApp();
+  const { loginWithGoogle, loginWithCredentials, claimAccountAndLogin, addToast, promptInstall, currentUser } = useApp();
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const initialClaimToken = searchParams.get('claim') || searchParams.get('invite') || '';
+  const [authMode, setAuthMode] = useState(() => (initialClaimToken ? 'claim' : 'google')); // 'google' | 'password' | 'claim'
+
+  // Password login state
+  const [passwordIdentifier, setPasswordIdentifier] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+
+  // Claim account state
+  const [claimTokenInput, setClaimTokenInput] = useState(initialClaimToken);
+  const [claimPasswordInput, setClaimPasswordInput] = useState('');
+  const [confirmClaimPasswordInput, setConfirmClaimPasswordInput] = useState('');
+
   // Pending Google data for new members who need to register their settlement UPI ID
   const [pendingGoogleData, setPendingGoogleData] = useState(null);
   const [upiInput, setUpiInput] = useState('');
@@ -182,6 +199,54 @@ export default function LoginPage() {
     }
   };
 
+  const handlePasswordLogin = async (e) => {
+    e.preventDefault();
+    if (!passwordIdentifier.trim() || !passwordInput) {
+      setErrorMsg('Please enter your name/email and password.');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      const member = await loginWithCredentials(passwordIdentifier.trim(), passwordInput);
+      addToast(`Welcome back, ${member.name}!`, 'success');
+      navigate('/', { replace: true });
+    } catch (err) {
+      console.error('Password login error:', err);
+      setErrorMsg(err.message || 'Login failed. Please verify your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClaimAccount = async (e) => {
+    e.preventDefault();
+    if (!claimTokenInput.trim()) {
+      setErrorMsg('Please provide a valid one-time invite token.');
+      return;
+    }
+    if (!claimPasswordInput || claimPasswordInput.length < 4) {
+      setErrorMsg('New password must be at least 4 characters long.');
+      return;
+    }
+    if (claimPasswordInput !== confirmClaimPasswordInput) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      const member = await claimAccountAndLogin(claimTokenInput.trim(), claimPasswordInput);
+      addToast(`Account activated successfully! Welcome to the flat, ${member.name}!`, 'success');
+      navigate('/', { replace: true });
+    } catch (err) {
+      console.error('Account claim error:', err);
+      setErrorMsg(err.message || 'Failed to claim account. Token may be invalid or expired.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleGoogleClick = () => {
     if (googleClientId && window.google?.accounts?.id) {
       window.google.accounts.id.prompt();
@@ -236,14 +301,72 @@ export default function LoginPage() {
           {/* Title Area */}
           <div className="space-y-1.5">
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {pendingGoogleData ? 'Complete Registration' : 'Sign In'}
+              {pendingGoogleData
+                ? 'Complete Registration'
+                : authMode === 'claim'
+                ? 'Claim Flat Invite'
+                : authMode === 'password'
+                ? 'Password Sign In'
+                : 'Sign In'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-400">
               {pendingGoogleData
                 ? 'Enter your UPI ID so flatmates can settle debts with you.'
-                : 'Sign in with Google to continue'}
+                : authMode === 'claim'
+                ? 'Enter your one-time invite token to set your password'
+                : authMode === 'password'
+                ? 'Sign in with your roommate username or email'
+                : 'Sign in with Google to access your flat dashboard'}
             </p>
           </div>
+
+          {/* Mode Tabs (when not in pending Google UPI flow) */}
+          {!pendingGoogleData && (
+            <div className="flex border-b border-slate-800 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('google');
+                  setErrorMsg('');
+                }}
+                className={`flex-1 pb-2.5 transition-colors cursor-pointer ${
+                  authMode === 'google'
+                    ? 'text-emerald-400 border-b-2 border-emerald-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Google Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('password');
+                  setErrorMsg('');
+                }}
+                className={`flex-1 pb-2.5 transition-colors cursor-pointer ${
+                  authMode === 'password'
+                    ? 'text-emerald-400 border-b-2 border-emerald-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Password
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('claim');
+                  setErrorMsg('');
+                }}
+                className={`flex-1 pb-2.5 transition-colors cursor-pointer ${
+                  authMode === 'claim'
+                    ? 'text-emerald-400 border-b-2 border-emerald-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Claim Invite
+              </button>
+            </div>
+          )}
 
           {/* Error Alert */}
           {errorMsg && (
@@ -326,6 +449,140 @@ export default function LoginPage() {
                 </button>
               </div>
             </form>
+          ) : authMode === 'password' ? (
+            /* Password Authentication Form */
+            <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Roommate Name or Email <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400">
+                    <User className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Rahul or rahul@flat.local"
+                    value={passwordIdentifier}
+                    onChange={(e) => setPasswordIdentifier(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Password <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter your password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <span>Signing In...</span>
+                ) : (
+                  <>
+                    <span>Sign In with Password</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : authMode === 'claim' ? (
+            /* Claim Account / Invite Token Form */
+            <form onSubmit={handleClaimAccount} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  One-Time Invite Token <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Paste the claim token provided by admin"
+                    value={claimTokenInput}
+                    onChange={(e) => setClaimTokenInput(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white font-mono placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Ask your Flat Admin to generate an invite token in Flat Settings.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Set Your Password <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Create a strong password (min 4 characters)"
+                    value={claimPasswordInput}
+                    onChange={(e) => setClaimPasswordInput(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Confirm Password <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Confirm your password"
+                    value={confirmClaimPasswordInput}
+                    onChange={(e) => setConfirmClaimPasswordInput(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <span>Activating Account...</span>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Activate Account &amp; Sign In</span>
+                  </>
+                )}
+              </button>
+            </form>
           ) : (
             /* Single Minimalist Google Sign-In Action */
             <div className="flex flex-col items-center justify-center pt-2 min-h-[46px]">
@@ -333,7 +590,7 @@ export default function LoginPage() {
               <div
                 ref={googleBtnRef}
                 id="google-btn-container"
-                className={isGoogleBtnLoaded ? "flex items-center justify-center" : "hidden"}
+                className={isGoogleBtnLoaded ? 'flex items-center justify-center' : 'hidden'}
               />
 
               {/* Fallback button - managed purely by React as a sibling, never inside googleBtnRef */}

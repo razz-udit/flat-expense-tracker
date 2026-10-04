@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Date, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -13,7 +13,9 @@ class RecurringExpense(Base):
     paid_by = Column(Integer, ForeignKey("members.id"), nullable=False)
     split_type = Column(String(20), default="equal", nullable=False) # "equal" or "custom"
     split_members = Column(Text, nullable=True) # JSON array of member IDs or map of member_id -> amount
-    frequency = Column(String(50), default="Monthly", nullable=False) # "Monthly", "Quarterly", "As Required"
+    frequency = Column(String(50), default="Monthly", nullable=False) # "Monthly", "Bi-Monthly", "Quarterly", "As Required"
+    start_date = Column(Date, nullable=True)
+    next_due_date = Column(Date, nullable=True)
     last_generated_period = Column(String(20), nullable=True) # e.g. "2026-10"
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

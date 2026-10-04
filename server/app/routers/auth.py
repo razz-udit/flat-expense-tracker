@@ -1,8 +1,10 @@
 import secrets
 import base64
 import json
+import hashlib
 import urllib.request
 import urllib.error
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -18,10 +20,12 @@ from app.schemas.auth import (
     SetPasswordRequest,
     ChangePasswordRequest, 
     VerifyAdminRequest, 
-    AdminResetPasswordRequest
+    AdminResetPasswordRequest,
+    ClaimAccountRequest
 )
 from app.schemas.member import MemberOut
 from app.services.auth_service import hash_password, verify_password, create_access_token
+from app.services.audit_service import log_audit
 from app.dependencies import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -166,7 +170,23 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
     google_id = verified["google_id"]
     clean_upi = data.upi_id.strip() if data.upi_id and data.upi_id.strip() else None
 
-    # 2. Search for existing member ONLY by google_id or verified email (NEVER by name)
+    # 2. Check for deactivated accounts first
+    if google_id:
+        deactivated = db.query(Member).filter(Member.google_id == google_id, Member.is_active == False).first()
+        if deactivated:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This flat account has been deactivated. Please contact your flat administrator."
+            )
+    if clean_email:
+        deactivated = db.query(Member).filter(func.lower(Member.email) == clean_email, Member.is_active == False).first()
+        if deactivated:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This flat account has been deactivated. Please contact your flat administrator."
+            )
+
+    # 3. Search for existing member ONLY by google_id or verified email (NEVER by name)
     member = None
     if google_id:
         member = db.query(Member).filter(Member.google_id == google_id, Member.is_active == True).first()
@@ -187,6 +207,8 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(member)
 
+        log_audit(db, "auth.google_login", member_id=member.id, details={"name": member.name, "email": member.email})
+
         token = create_access_token(member.id, getattr(member, "token_version", 1))
         return LoginResponse(
             success=True,
@@ -195,7 +217,7 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
             token=token
         )
 
-    # 3. New member signing up with Google
+    # 4. New member signing up with Google
     if not clean_upi or "@" not in clean_upi or len(clean_upi) < 3:
         raise HTTPException(
             status_code=400,
@@ -218,6 +240,8 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
     db.add(new_member)
     db.commit()
     db.refresh(new_member)
+
+    log_audit(db, "auth.google_signup", member_id=new_member.id, details={"name": new_member.name, "email": new_member.email})
 
     token = create_access_token(new_member.id, new_member.token_version)
     return LoginResponse(
@@ -271,6 +295,9 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
         existing.token_version = getattr(existing, "token_version", 1)
         db.commit()
         db.refresh(existing)
+
+        log_audit(db, "auth.signup_claimed", member_id=existing.id, details={"name": existing.name})
+
         token = create_access_token(existing.id, existing.token_version)
         return LoginResponse(
             success=True,
@@ -295,6 +322,8 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_member)
 
+    log_audit(db, "auth.signup", member_id=new_member.id, details={"name": new_member.name})
+
     token = create_access_token(new_member.id, new_member.token_version)
     return LoginResponse(
         success=True,
@@ -308,6 +337,18 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     ident = data.identifier.strip()
     pwd = data.password.strip()
 
+    # Disambiguate duplicate member names on login
+    if not ident.isdigit() and "@" not in ident:
+        matching_by_name = db.query(Member).filter(
+            func.lower(Member.name) == ident.lower(),
+            Member.is_active == True
+        ).all()
+        if len(matching_by_name) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Multiple flat members share the name '{ident}'. Please log in using your unique Email or Member ID."
+            )
+
     member = find_member_by_identifier(ident, db)
     if not member:
         raise HTTPException(
@@ -319,7 +360,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not member.password_hash:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password has not been created for this account yet. Please use the 'Sign Up' or 'Set Password' tab to set your initial password."
+            detail="Password has not been created for this account yet. Please claim your account using the invitation link provided by your flat admin."
         )
 
     if not verify_password(pwd, member.password_hash):
@@ -330,6 +371,8 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(member.id, getattr(member, "token_version", 1))
 
+    log_audit(db, "auth.login", member_id=member.id, details={"name": member.name})
+
     return LoginResponse(
         success=True,
         message=f"Welcome back, {member.name}!",
@@ -337,32 +380,60 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         token=token
     )
 
-@router.post("/set-password", response_model=LoginResponse)
-def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
-    member = find_member_by_identifier(data.identifier, db)
+@router.post("/claim", response_model=LoginResponse)
+def claim_account(data: ClaimAccountRequest, db: Session = Depends(get_db)):
+    clean_token = data.token.strip()
+    if not clean_token:
+        raise HTTPException(status_code=400, detail="Claim token is required.")
+
+    token_hash = hashlib.sha256(clean_token.encode("utf-8")).hexdigest()
+    member = db.query(Member).filter(
+        Member.claim_token_hash == token_hash,
+        Member.is_active == True
+    ).first()
+
     if not member:
         raise HTTPException(
-            status_code=404, 
-            detail="Member not found."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid invitation token or account does not exist."
         )
 
-    if member.password_hash:
+    if member.claim_token_expires_at and member.claim_token_expires_at < datetime.now():
         raise HTTPException(
-            status_code=400, 
-            detail="A password is already set for this account. Please sign in with your password or use Settings to change it."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token has expired. Please ask your flat administrator to generate a new invite link."
         )
 
-    member.password_hash = hash_password(data.new_password.strip())
+    pwd = data.password.strip()
+    if len(pwd) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters long.")
+
+    member.password_hash = hash_password(pwd)
+    # Single-use: immediately invalidate token
+    member.claim_token_hash = None
+    member.claim_token_expires_at = None
+    # Invalidate any old sessions
     member.token_version = getattr(member, "token_version", 1) + 1
+
     db.commit()
     db.refresh(member)
-    token = create_access_token(member.id, member.token_version)
 
+    log_audit(db, "member.claimed", member_id=member.id, details={"member_name": member.name})
+
+    token = create_access_token(member.id, member.token_version)
     return LoginResponse(
         success=True,
-        message=f"Password set successfully! Welcome, {member.name}!",
+        message=f"Welcome to the flat, {member.name}! Your account has been claimed and password established.",
         member=MemberOut.model_validate(member),
         token=token
+    )
+
+@router.post("/set-password", response_model=LoginResponse)
+def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
+    # Direct password setting by name/ID alone is disabled for security
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Direct password setting by identifier is disabled for security. Please use the one-time invite claim link provided by your flat administrator (POST /api/auth/claim)."
     )
 
 @router.post("/change-password")
@@ -391,6 +462,8 @@ def change_password(
     # Invalidate old sessions by incrementing token_version
     target_member.token_version = getattr(target_member, "token_version", 1) + 1
     db.commit()
+
+    log_audit(db, "auth.password_changed", member_id=target_member.id, details={"changed_by": current_user.id})
 
     return {"success": True, "message": "Password updated successfully! Old sessions have been invalidated."}
 
@@ -428,5 +501,7 @@ def admin_reset_password(
     # Invalidate all existing sessions of the target member
     target.token_version = getattr(target, "token_version", 1) + 1
     db.commit()
+
+    log_audit(db, "auth.admin_reset_password", member_id=target.id, details={"admin_id": admin_caller.id})
 
     return {"success": True, "message": f"Password for {target.name} has been reset successfully! Old sessions invalidated."}

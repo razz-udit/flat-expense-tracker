@@ -11,7 +11,7 @@ function getActiveUserId() {
   return saved ? parseInt(saved, 10) : null;
 }
 
-function getAuthToken() {
+export function getAuthToken() {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('flat_auth_token') || null;
 }
@@ -101,6 +101,9 @@ export const api = {
   updateMember: (id, data) => request(`/members/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMember: (id) => request(`/members/${id}`, { method: 'DELETE' }),
   configureFlatSize: (data) => request('/members/configure-size', { method: 'POST', body: JSON.stringify(data) }),
+  generateInvite: (memberId) => request(`/members/${memberId}/generate-invite`, { method: 'POST' }),
+  getLeavePreview: (memberId) => request(`/members/${memberId}/leave-preview`),
+  leaveFlat: (memberId) => request(`/members/${memberId}/leave`, { method: 'POST' }),
 
   // Categories
   getCategories: (includeInactive = false) => request(`/categories?include_inactive=${includeInactive}`),
@@ -166,6 +169,20 @@ export const api = {
     }
     return await response.json();
   },
+  disputeExpense: (id, reason) =>
+    request(`/expenses/${id}/dispute`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  resolveDispute: (id, action, resolutionNotes = '') =>
+    request(`/expenses/${id}/resolve-dispute`, {
+      method: 'POST',
+      body: JSON.stringify({ action, resolution_notes: resolutionNotes }),
+    }),
+  getExpenseReceiptUrl: (id) => {
+    const token = getAuthToken();
+    return `${API_BASE}/expenses/${id}/receipt${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 
   // Payments / Settlements
   getPayments: (params = {}) => {
@@ -220,6 +237,27 @@ export const api = {
   getSettlements: () => request('/settlements'),
   getMonthlyHistory: () => request('/monthly-history'),
   getMonthlySummary: (year, month) => request(`/monthly-summary/${year}/${month}`),
+  getAuditLogs: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.limit) query.append('limit', params.limit);
+    if (params.offset) query.append('offset', params.offset);
+    const qs = query.toString();
+    return request(`/audit-logs${qs ? `?${qs}` : ''}`);
+  },
+  getExportExpensesCsvUrl: (params = {}) => {
+    const query = new URLSearchParams();
+    const token = getAuthToken();
+    if (token) query.append('token', token);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') query.append(k, v);
+    });
+    const qs = query.toString();
+    return `${API_BASE}/export/expenses/csv${qs ? `?${qs}` : ''}`;
+  },
+  getAdminBackupUrl: () => {
+    const token = getAuthToken();
+    return `${API_BASE}/admin/backup${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 
   // Authentication
   googleAuth: (payload) =>
@@ -236,6 +274,11 @@ export const api = {
     request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
+    }),
+  claimAccount: (token, password) =>
+    request('/auth/claim', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
     }),
   setPassword: (identifier, newPassword) =>
     request('/auth/set-password', {
@@ -271,14 +314,18 @@ export const api = {
   resetData: () => request('/reset-data', { method: 'POST' }),
 };
 
-export function getReceiptFullUrl(url) {
+export function getReceiptFullUrl(url, expenseId) {
+  const token = getAuthToken();
+  if (expenseId) {
+    return `${API_BASE}/expenses/${expenseId}/receipt${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  }
   if (!url) return '';
   if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
   if (import.meta.env?.VITE_API_URL) {
     const base = import.meta.env.VITE_API_URL.replace(/\/$/, '').replace(/\/api$/, '');
-    return `${base}${url}`;
+    return `${base}${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
-  return url;
+  return `${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }

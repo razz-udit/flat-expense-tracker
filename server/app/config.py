@@ -73,13 +73,15 @@ class Settings(BaseSettings):
 
     def get_auth_secret(self) -> str:
         """Returns the auth secret, providing an ephemeral dev secret in non-production environments."""
+        if self.APP_ENV == "production":
+            if not self.AUTH_SECRET or len(self.AUTH_SECRET) < 32:
+                raise RuntimeError(
+                    "CRITICAL: AUTH_SECRET must be configured with at least 32 characters in production. "
+                    "Application startup aborted."
+                )
+            return self.AUTH_SECRET
         if self.AUTH_SECRET and len(self.AUTH_SECRET) >= 16:
             return self.AUTH_SECRET
-        if self.APP_ENV == "production":
-            raise RuntimeError(
-                "CRITICAL: AUTH_SECRET must be configured with at least 32 characters in production. "
-                "Application startup aborted."
-            )
         # Safe default for local development and automated testing only
         return "dev-local-jwt-secret-session-key-32chars-min!!"
 

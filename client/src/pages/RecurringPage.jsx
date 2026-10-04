@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
+import { getLocalDateString } from '../utils/date';
 import { 
   Repeat, 
   PlusCircle, 
@@ -78,7 +79,7 @@ export default function RecurringPage() {
       setTitle('');
       setCategoryId(categories[0]?.id || '');
       setAmount('');
-      setPaidBy(members[0]?.id || '');
+      setPaidBy(currentUser?.id || members[0]?.id || '');
       setFrequency('Monthly');
       setNotes('');
     }
@@ -139,7 +140,7 @@ export default function RecurringPage() {
   const handleOpenGenerateModal = (item) => {
     setItemToGenerate(item);
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = getLocalDateString(today);
     const monthName = today.toLocaleString('default', { month: 'long', year: 'numeric' });
     setGenerateDate(todayStr);
     setGenerateDesc(`${item.title} (${monthName})`);
