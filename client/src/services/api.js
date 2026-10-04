@@ -1,4 +1,12 @@
-const API_BASE = (import.meta.env?.VITE_API_URL ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api` : '') || '/api';
+const API_BASE = (() => {
+  if (import.meta.env?.VITE_API_URL) {
+    return `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`;
+  }
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    return 'https://flat-expense-tracker-backend.onrender.com/api';
+  }
+  return '/api';
+})();
 
 function getActiveUserId() {
   if (typeof window === 'undefined') return null;

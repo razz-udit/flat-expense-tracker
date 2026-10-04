@@ -14,7 +14,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
+        target: process.env.VITE_BACKEND_URL || (process.env.RENDER ? 'https://flat-expense-tracker-backend.onrender.com' : 'http://127.0.0.1:8000'),
         changeOrigin: true
       }
     }
