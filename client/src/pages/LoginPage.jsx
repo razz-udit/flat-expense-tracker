@@ -121,7 +121,6 @@ export default function LoginPage() {
             auto_select: false,
           });
 
-          googleBtnRef.current.innerHTML = '';
           window.google.accounts.id.renderButton(googleBtnRef.current, {
             theme: 'filled_blue',
             size: 'large',
@@ -329,21 +328,26 @@ export default function LoginPage() {
             </form>
           ) : (
             /* Single Minimalist Google Sign-In Action */
-            <div className="flex flex-col items-center justify-center pt-2">
-              {/* Google Button Container (Only ONE button rendered) */}
-              <div ref={googleBtnRef} id="google-btn-container" className="min-h-[46px] flex items-center justify-center">
-                {!isGoogleBtnLoaded && (
-                  <button
-                    type="button"
-                    onClick={handleGoogleClick}
-                    disabled={isLoading}
-                    className="py-3 px-6 rounded-full bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
-                  >
-                    <GoogleLogo className="w-5 h-5 shrink-0" />
-                    <span>Continue with Google</span>
-                  </button>
-                )}
-              </div>
+            <div className="flex flex-col items-center justify-center pt-2 min-h-[46px]">
+              {/* External Google Button Container - purely managed by Google SDK */}
+              <div
+                ref={googleBtnRef}
+                id="google-btn-container"
+                className={isGoogleBtnLoaded ? "flex items-center justify-center" : "hidden"}
+              />
+
+              {/* Fallback button - managed purely by React as a sibling, never inside googleBtnRef */}
+              {!isGoogleBtnLoaded && (
+                <button
+                  type="button"
+                  onClick={handleGoogleClick}
+                  disabled={isLoading}
+                  className="py-3 px-6 rounded-full bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
+                >
+                  <GoogleLogo className="w-5 h-5 shrink-0" />
+                  <span>Continue with Google</span>
+                </button>
+              )}
             </div>
           )}
         </div>
