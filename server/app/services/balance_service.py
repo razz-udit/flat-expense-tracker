@@ -24,11 +24,11 @@ def calculate_all_balances(db: Session, member_id: Optional[int] = None) -> List
     ).group_by(Expense.paid_by).all()
     paid_map: Dict[int, Decimal] = {p[0]: Decimal(str(p[1])) for p in paid_query}
 
-    # Total share owed in expenses by each member
+    # Total share owed in expenses by each member (joined with Expense to guarantee active expenses only)
     owed_query = db.query(
         ExpenseSplit.member_id,
         func.coalesce(func.sum(ExpenseSplit.amount), 0).label("total_owed")
-    ).group_by(ExpenseSplit.member_id).all()
+    ).join(Expense, Expense.id == ExpenseSplit.expense_id).group_by(ExpenseSplit.member_id).all()
     owed_map: Dict[int, Decimal] = {o[0]: Decimal(str(o[1])) for o in owed_query}
 
     # Settlements paid (from_member) where status == 'Paid'
@@ -56,9 +56,9 @@ def calculate_all_balances(db: Session, member_id: Optional[int] = None) -> List
         net_bal = (t_paid + s_paid) - (t_owed + s_recv)
         net_bal = round(net_bal, 2)
 
-        if net_bal > Decimal("0.01"):
+        if net_bal > Decimal("0.005"):
             status = "Receivable"
-        elif net_bal < Decimal("-0.01"):
+        elif net_bal < Decimal("-0.005"):
             status = "Owes"
         else:
             status = "Settled"
@@ -87,14 +87,14 @@ def calculate_settlements(balances: List[MemberBalanceOut]) -> List[SettlementRe
     creditors = []
 
     for b in balances:
-        if b.net_balance < Decimal("-0.01"):
+        if b.net_balance < Decimal("-0.005"):
             debtors.append({
                 "id": b.member_id,
                 "name": b.member_name,
                 "upi": b.upi_id,
                 "amount": abs(b.net_balance)
             })
-        elif b.net_balance > Decimal("0.01"):
+        elif b.net_balance > Decimal("0.005"):
             creditors.append({
                 "id": b.member_id,
                 "name": b.member_name,
@@ -136,9 +136,9 @@ def calculate_settlements(balances: List[MemberBalanceOut]) -> List[SettlementRe
         debtor["amount"] -= settle_amount
         creditor["amount"] -= settle_amount
 
-        if debtor["amount"] <= Decimal("0.01"):
+        if debtor["amount"] <= Decimal("0.005"):
             i += 1
-        if creditor["amount"] <= Decimal("0.01"):
+        if creditor["amount"] <= Decimal("0.005"):
             j += 1
 
     return recommendations

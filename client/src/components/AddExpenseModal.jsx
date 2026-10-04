@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock } from 'lucide-react';
+import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock, Equal, Percent, Hash } from 'lucide-react';
 
 export default function AddExpenseModal({ onExpenseSaved }) {
   const {
@@ -26,9 +26,13 @@ export default function AddExpenseModal({ onExpenseSaved }) {
   const [hasBillingPeriod, setHasBillingPeriod] = useState(false);
   const [billingStart, setBillingStart] = useState('');
   const [billingEnd, setBillingEnd] = useState('');
-  const [splitType, setSplitType] = useState('equal'); // 'equal' | 'custom'
+  
+  // Split Modes: 'equal' | 'exact' | 'percentage' | 'shares'
+  const [splitType, setSplitType] = useState('equal');
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [customSplits, setCustomSplits] = useState({}); // { [memberId]: string_amount }
+  const [percentageSplits, setPercentageSplits] = useState({}); // { [memberId]: string_percent }
+  const [sharesSplits, setSharesSplits] = useState({}); // { [memberId]: string_shares }
   const [notes, setNotes] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +48,6 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     const todayStr = new Date().toISOString().split('T')[0];
 
     if (editingExpense) {
-      // Editing existing expense
       setCategoryId(editingExpense.category_id ? editingExpense.category_id.toString() : '');
       setCustomCategoryInput('');
       setIsCreatingNewCategory(false);
@@ -64,16 +67,28 @@ export default function AddExpenseModal({ onExpenseSaved }) {
         setBillingEnd('');
       }
 
-      setSplitType(editingExpense.split_type || 'equal');
+      const st = editingExpense.split_type === 'custom' ? 'exact' : (editingExpense.split_type || 'equal');
+      setSplitType(st);
 
       const splitMids = (editingExpense.splits || []).map((s) => s.member_id);
-      setSelectedMemberIds(splitMids.length > 0 ? splitMids : members.map((m) => m.id));
+      const participatingIds = splitMids.length > 0 ? splitMids : members.map((m) => m.id);
+      setSelectedMemberIds(participatingIds);
 
       const customMap = {};
+      const pctMap = {};
+      const sharesMap = {};
+      const totalExpAmt = parseFloat(editingExpense.amount) || 1;
+
       (editingExpense.splits || []).forEach((s) => {
+        const sAmt = parseFloat(s.amount) || 0;
         customMap[s.member_id] = s.amount?.toString() || '';
+        pctMap[s.member_id] = ((sAmt / totalExpAmt) * 100).toFixed(1);
+        sharesMap[s.member_id] = '1';
       });
+
       setCustomSplits(customMap);
+      setPercentageSplits(pctMap);
+      setSharesSplits(sharesMap);
     } else {
       // New expense defaults
       if (categories && categories.length > 0) {
@@ -93,24 +108,51 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       setBillingStart('');
       setBillingEnd('');
       setSplitType('equal');
-      setSelectedMemberIds(members.map((m) => m.id));
+      const allMids = members.map((m) => m.id);
+      setSelectedMemberIds(allMids);
       setCustomSplits({});
+      
+      // Initialize default percentages and shares
+      const defPct = allMids.length > 0 ? (100 / allMids.length).toFixed(1) : '0';
+      const initialPct = {};
+      const initialShares = {};
+      allMids.forEach((mid) => {
+        initialPct[mid] = defPct;
+        initialShares[mid] = '1';
+      });
+      setPercentageSplits(initialPct);
+      setSharesSplits(initialShares);
     }
   }, [isExpenseModalOpen, editingExpense, members, categories, activeMemberId]);
 
   if (!isExpenseModalOpen) return null;
 
-  // Calculate live equal share preview
   const parsedAmount = parseFloat(amount) || 0;
   const numSelected = selectedMemberIds.length;
+
+  // 1. Equal split calculation
   const equalSharePerPerson = numSelected > 0 ? (parsedAmount / numSelected).toFixed(2) : '0.00';
 
-  // Calculate live custom total
+  // 2. Exact amount split calculation
   const customTotal = selectedMemberIds.reduce((sum, mid) => {
     const val = parseFloat(customSplits[mid]) || 0;
     return sum + val;
   }, 0);
   const customDifference = parseFloat((parsedAmount - customTotal).toFixed(2));
+
+  // 3. Percentage split calculation
+  const totalPercentage = selectedMemberIds.reduce((sum, mid) => {
+    const val = parseFloat(percentageSplits[mid]) || 0;
+    return sum + val;
+  }, 0);
+  const pctDifference = parseFloat((100 - totalPercentage).toFixed(2));
+
+  // 4. Shares split calculation
+  const totalShares = selectedMemberIds.reduce((sum, mid) => {
+    const val = parseFloat(sharesSplits[mid]) || 0;
+    return sum + (val > 0 ? val : 1);
+  }, 0);
+  const amountPerShare = totalShares > 0 ? (parsedAmount / totalShares).toFixed(2) : '0.00';
 
   const toggleMemberSelection = (mid) => {
     if (selectedMemberIds.includes(mid)) {
@@ -118,27 +160,35 @@ export default function AddExpenseModal({ onExpenseSaved }) {
         setValidationError('At least one member must participate in the expense.');
         return;
       }
-      setSelectedMemberIds(selectedMemberIds.filter((id) => id !== mid));
+      const nextMids = selectedMemberIds.filter((id) => id !== mid);
+      setSelectedMemberIds(nextMids);
+
       const nextCustom = { ...customSplits };
       delete nextCustom[mid];
       setCustomSplits(nextCustom);
+
+      const nextPct = { ...percentageSplits };
+      delete nextPct[mid];
+      setPercentageSplits(nextPct);
+
+      const nextShares = { ...sharesSplits };
+      delete nextShares[mid];
+      setSharesSplits(nextShares);
     } else {
       setSelectedMemberIds([...selectedMemberIds, mid]);
+      setSharesSplits((prev) => ({ ...prev, [mid]: '1' }));
     }
   };
 
   const handleSelectAll = () => {
-    setSelectedMemberIds(members.map((m) => m.id));
+    const allMids = members.map((m) => m.id);
+    setSelectedMemberIds(allMids);
+    const sharesMap = {};
+    allMids.forEach((id) => { sharesMap[id] = sharesSplits[id] || '1'; });
+    setSharesSplits(sharesMap);
   };
 
-  const handleCustomSplitChange = (mid, val) => {
-    setCustomSplits((prev) => ({
-      ...prev,
-      [mid]: val,
-    }));
-  };
-
-  const handleDistributeRemaining = () => {
+  const handleDistributeEvenlyExact = () => {
     if (selectedMemberIds.length === 0 || parsedAmount <= 0) return;
     const share = (parsedAmount / selectedMemberIds.length).toFixed(2);
     const newSplits = {};
@@ -154,6 +204,31 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     setCustomSplits(newSplits);
   };
 
+  const handleDistributePercentages = () => {
+    if (selectedMemberIds.length === 0) return;
+    const n = selectedMemberIds.length;
+    const basePct = parseFloat((100 / n).toFixed(1));
+    const newPcts = {};
+    let sum = 0;
+    selectedMemberIds.forEach((mid, idx) => {
+      if (idx === n - 1) {
+        newPcts[mid] = (100 - sum).toFixed(1);
+      } else {
+        newPcts[mid] = basePct.toFixed(1);
+        sum += basePct;
+      }
+    });
+    setPercentageSplits(newPcts);
+  };
+
+  const handleResetShares = () => {
+    const newShares = {};
+    selectedMemberIds.forEach((mid) => {
+      newShares[mid] = '1';
+    });
+    setSharesSplits(newShares);
+  };
+
   const selectedCategory = categories.find((c) => c.id.toString() === categoryId?.toString());
   const currentCategoryName = (isCreatingNewCategory || categories.length === 0)
     ? customCategoryInput.trim()
@@ -166,18 +241,10 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     return generalKeywords.some((k) => name.includes(k));
   };
   const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
-  const canEdit = !editingExpense || Boolean(currentUser && editingExpense.paid_by === currentUser.id);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setValidationError('');
-
-    if (editingExpense && !canEdit) {
-      setValidationError(
-        `Permission denied: You cannot edit this expense because it was paid by ${editingExpense.payer?.name || 'another member'}. Only the payer can edit their own expense.`
-      );
-      return;
-    }
 
     if (parsedAmount <= 0) {
       setValidationError('Please enter a valid expense amount greater than 0.');
@@ -216,7 +283,6 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       return;
     }
 
-    // Specific product categories (like LPG Gas, Electricity, WiFi, Maid) default to category name if empty
     const finalDescription = trimmedDesc || displayCategoryName;
 
     if (selectedMemberIds.length === 0) {
@@ -225,19 +291,64 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     }
 
     let payloadSplits = undefined;
-    if (splitType === 'custom') {
-      if (Math.abs(customDifference) > 0.01) {
+
+    if (splitType === 'exact' || splitType === 'custom') {
+      if (Math.abs(customDifference) > 0.05) {
         setValidationError(
-          `Custom splits total (₹${customTotal.toFixed(2)}) must equal the expense amount (₹${parsedAmount.toFixed(
-            2
-          )}). Difference: ₹${Math.abs(customDifference).toFixed(2)}.`
+          `Exact splits total (₹${customTotal.toFixed(2)}) must equal the expense amount (₹${parsedAmount.toFixed(2)}). Difference: ₹${Math.abs(customDifference).toFixed(2)}.`
         );
         return;
       }
-
       payloadSplits = selectedMemberIds.map((mid) => ({
         member_id: mid,
         amount: parseFloat(customSplits[mid] || 0),
+      }));
+    } else if (splitType === 'percentage') {
+      if (Math.abs(pctDifference) > 0.5) {
+        setValidationError(
+          `Total percentage must equal 100%. Current total: ${totalPercentage.toFixed(1)}% (difference: ${pctDifference > 0 ? `${pctDifference.toFixed(1)}% remaining` : `${Math.abs(pctDifference).toFixed(1)}% over`}).`
+        );
+        return;
+      }
+      // Compute accurate rupee amounts with cents distribution
+      const totalCents = Math.round(parsedAmount * 100);
+      let sumAllocated = 0;
+      const rawSplits = selectedMemberIds.map((mid) => {
+        const pct = parseFloat(percentageSplits[mid]) || 0;
+        const cents = Math.round(totalCents * (pct / 100));
+        sumAllocated += cents;
+        return { member_id: mid, percentage: pct, cents };
+      });
+      const diffCents = totalCents - sumAllocated;
+      if (diffCents !== 0 && rawSplits.length > 0) {
+        rawSplits[0].cents += diffCents;
+      }
+      payloadSplits = rawSplits.map((s) => ({
+        member_id: s.member_id,
+        percentage: s.percentage,
+        amount: parseFloat((s.cents / 100).toFixed(2)),
+      }));
+    } else if (splitType === 'shares') {
+      if (totalShares <= 0) {
+        setValidationError('Total shares must be greater than 0.');
+        return;
+      }
+      const totalCents = Math.round(parsedAmount * 100);
+      let sumAllocated = 0;
+      const rawSplits = selectedMemberIds.map((mid) => {
+        const sh = parseFloat(sharesSplits[mid]) || 1;
+        const cents = Math.round(totalCents * (sh / totalShares));
+        sumAllocated += cents;
+        return { member_id: mid, shares: sh, cents };
+      });
+      const diffCents = totalCents - sumAllocated;
+      if (diffCents !== 0 && rawSplits.length > 0) {
+        rawSplits[0].cents += diffCents;
+      }
+      payloadSplits = rawSplits.map((s) => ({
+        member_id: s.member_id,
+        shares: s.shares,
+        amount: parseFloat((s.cents / 100).toFixed(2)),
       }));
     }
 
@@ -260,7 +371,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       setIsSubmitting(true);
       if (editingExpense) {
         await api.updateExpense(editingExpense.id, payload, currentUser?.id);
-        addToast('Expense updated successfully!', 'success');
+        addToast('Expense updated successfully! Balances recalculated.', 'success');
       } else {
         await api.createExpense(payload);
         addToast('New flat expense added successfully!', 'success');
@@ -303,17 +414,6 @@ export default function AddExpenseModal({ onExpenseSaved }) {
           </div>
         )}
 
-        {/* Read-Only Mode Banner */}
-        {editingExpense && !canEdit && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Read-Only Mode:</strong> This expense was recorded by{' '}
-              <strong>{editingExpense.payer?.name || `Member ${editingExpense.paid_by}`}</strong>. Only they or the Flat Admin can edit or delete it.
-            </span>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Amount & Category */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -348,52 +448,35 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                       setIsCreatingNewCategory(!isCreatingNewCategory);
                       if (isCreatingNewCategory) {
                         setCustomCategoryInput('');
-                        setCategoryId(categories[0]?.id.toString() || '');
                       }
                     }}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
                   >
-                    {isCreatingNewCategory ? '← Choose Existing' : '+ New Category'}
+                    {isCreatingNewCategory ? 'Select from list' : '+ New Category'}
                   </button>
                 )}
               </div>
 
               {isCreatingNewCategory || categories.length === 0 ? (
-                <div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter category (e.g. Grocery, WiFi, Electricity, Snacks)..."
-                    value={customCategoryInput}
-                    onChange={(e) => setCustomCategoryInput(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 bg-indigo-50/20"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Categories are completely dynamic. Type any category and it will be saved for your flat.
-                  </p>
-                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. WiFi, Grocery, Maid, Milk"
+                  value={customCategoryInput}
+                  onChange={(e) => setCustomCategoryInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-indigo-300 bg-indigo-50/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-950 placeholder:text-slate-400"
+                />
               ) : (
                 <select
                   value={categoryId}
-                  onChange={(e) => {
-                    if (e.target.value === '__NEW__') {
-                      setIsCreatingNewCategory(true);
-                      setCustomCategoryInput('');
-                    } else {
-                      setCategoryId(e.target.value);
-                    }
-                  }}
-                  required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 bg-white"
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                  <option value="__NEW__" className="text-indigo-600 font-bold">
-                    + Create New Category...
-                  </option>
                 </select>
               )}
             </div>
@@ -408,38 +491,27 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               <select
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
-                disabled={Boolean(editingExpense || currentUser)}
-                required
-                className={`w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 ${
-                  editingExpense || currentUser ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-white'
-                }`}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 bg-white"
               >
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name} {m.upi_id ? `(${m.upi_id})` : ''}
+                    {m.name} {currentUser && m.id === currentUser.id ? '(You)' : ''}
                   </option>
                 ))}
               </select>
-              {editingExpense ? (
-                <p className="text-[10px] text-slate-400 mt-1">The payer of a recorded expense cannot be reassigned.</p>
-              ) : currentUser ? (
-                <p className="text-[10px] text-slate-400 mt-1">Logged in as {currentUser.name}. You are recording this expense as payer.</p>
-              ) : null}
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Expense Date *
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  required
-                  value={expenseDate}
-                  onChange={(e) => setExpenseDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"
-                />
-              </div>
+              <input
+                type="date"
+                required
+                value={expenseDate}
+                onChange={(e) => setExpenseDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"
+              />
             </div>
           </div>
 
@@ -473,12 +545,12 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             />
           </div>
 
-          {/* Billing Period (Optional e.g. for Electricity / Multi-Month) */}
+          {/* Billing Period (Optional) */}
           <div className="pt-1">
             <button
               type="button"
               onClick={() => setHasBillingPeriod(!hasBillingPeriod)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
             >
               <CalendarRange className="w-3.5 h-3.5" />
               <span>{hasBillingPeriod ? 'Remove Billing Period' : '+ Add Multi-Month Billing Period (e.g. Electricity)'}</span>
@@ -554,46 +626,93 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               })}
             </div>
 
-            {/* Split Type Selector */}
-            <div className="flex rounded-xl bg-slate-100 p-1 mb-3">
+            {/* Google Pay-Style Split Mode Tabs */}
+            <div className="flex rounded-xl bg-slate-100 p-1 mb-3 overflow-x-auto gap-1">
               <button
                 type="button"
                 onClick={() => setSplitType('equal')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                   splitType === 'equal'
                     ? 'bg-white text-indigo-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Equal Split ({numSelected > 0 ? `₹${equalSharePerPerson}/person` : '₹0'})
+                <Equal className="w-3.5 h-3.5" />
+                <span>Equally (=)</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => {
-                  setSplitType('custom');
+                  setSplitType('exact');
                   if (Object.keys(customSplits).length === 0) {
-                    handleDistributeRemaining();
+                    handleDistributeEvenlyExact();
                   }
                 }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  splitType === 'custom'
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                  splitType === 'exact'
                     ? 'bg-white text-indigo-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Custom Amount Split
+                <span>₹</span>
+                <span>Exact (₹)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSplitType('percentage');
+                  handleDistributePercentages();
+                }}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                  splitType === 'percentage'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Percent className="w-3.5 h-3.5" />
+                <span>Percentage (%)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSplitType('shares');
+                  handleResetShares();
+                }}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                  splitType === 'shares'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Hash className="w-3.5 h-3.5" />
+                <span>Shares (x)</span>
               </button>
             </div>
 
-            {/* Custom Split Inputs */}
-            {splitType === 'custom' && (
+            {/* Split Mode Content 1: Equal Split */}
+            {splitType === 'equal' && (
+              <div className="bg-indigo-50/60 p-3 rounded-xl border border-indigo-100 flex items-center justify-between text-xs mb-3">
+                <span className="font-semibold text-indigo-900">
+                  Equal share among {numSelected} roommates:
+                </span>
+                <span className="font-extrabold text-indigo-700 text-sm">
+                  ₹{equalSharePerPerson} / person
+                </span>
+              </div>
+            )}
+
+            {/* Split Mode Content 2: Exact Amounts (₹) */}
+            {splitType === 'exact' && (
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
                 <div className="flex items-center justify-between text-xs font-bold mb-1">
-                  <span className="text-slate-700">Member Custom Shares</span>
+                  <span className="text-slate-700">Enter exact amount per person</span>
                   <button
                     type="button"
-                    onClick={handleDistributeRemaining}
-                    className="text-indigo-600 hover:underline text-[11px]"
+                    onClick={handleDistributeEvenlyExact}
+                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
                   >
                     Distribute Evenly
                   </button>
@@ -615,7 +734,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             min="0"
                             placeholder="0.00"
                             value={customSplits[mid] || ''}
-                            onChange={(e) => handleCustomSplitChange(mid, e.target.value)}
+                            onChange={(e) => setCustomSplits({ ...customSplits, [mid]: e.target.value })}
                             className="w-full pl-6 pr-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
                           />
                         </div>
@@ -624,19 +743,135 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   })}
                 </div>
 
-                {/* Custom split validation indicator */}
                 <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-600">Total Custom: ₹{customTotal.toFixed(2)}</span>
-                  {Math.abs(customDifference) < 0.01 ? (
+                  <span className="text-slate-600">Total Assigned: ₹{customTotal.toFixed(2)}</span>
+                  {Math.abs(customDifference) <= 0.05 ? (
                     <span className="text-emerald-600 flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> Matches Target (₹{parsedAmount.toFixed(2)})
+                      <Check className="w-3.5 h-3.5" /> Balanced (₹{parsedAmount.toFixed(2)})
                     </span>
                   ) : (
                     <span className="text-rose-600">
-                      Difference: ₹{Math.abs(customDifference).toFixed(2)}{' '}
-                      {customDifference > 0 ? 'under' : 'over'}
+                      ₹{Math.abs(customDifference).toFixed(2)}{' '}
+                      {customDifference > 0 ? 'remaining' : 'over'}
                     </span>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Split Mode Content 3: By Percentage (%) */}
+            {splitType === 'percentage' && (
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span className="text-slate-700">Enter percentage per person (%)</span>
+                  <button
+                    type="button"
+                    onClick={handleDistributePercentages}
+                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
+                  >
+                    Distribute Evenly
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {selectedMemberIds.map((mid) => {
+                    const member = members.find((m) => m.id === mid);
+                    const pctVal = parseFloat(percentageSplits[mid]) || 0;
+                    const calculatedAmt = (parsedAmount * (pctVal / 100)).toFixed(2);
+                    return (
+                      <div key={mid} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-slate-800 truncate block">
+                            {member?.name || `Member ${mid}`}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            ≈ ₹{calculatedAmt}
+                          </span>
+                        </div>
+                        <div className="relative w-24">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            placeholder="0"
+                            value={percentageSplits[mid] || ''}
+                            onChange={(e) => setPercentageSplits({ ...percentageSplits, [mid]: e.target.value })}
+                            className="w-full pr-6 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
+                          />
+                          <span className="absolute right-2 top-1 text-xs text-slate-400 font-bold">%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs font-bold">
+                  <span className="text-slate-600">Total: {totalPercentage.toFixed(1)}%</span>
+                  {Math.abs(pctDifference) <= 0.5 ? (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> 100% Assigned
+                    </span>
+                  ) : (
+                    <span className="text-rose-600">
+                      {Math.abs(pctDifference).toFixed(1)}% {pctDifference > 0 ? 'remaining' : 'over'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Split Mode Content 4: By Shares / Parts (x) */}
+            {splitType === 'shares' && (
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-3">
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span className="text-slate-700">Enter parts/shares per person</span>
+                  <button
+                    type="button"
+                    onClick={handleResetShares}
+                    className="text-indigo-600 hover:underline text-[11px] cursor-pointer"
+                  >
+                    Reset to 1 share each
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {selectedMemberIds.map((mid) => {
+                    const member = members.find((m) => m.id === mid);
+                    const shVal = parseFloat(sharesSplits[mid]) || 1;
+                    const calculatedAmt = totalShares > 0 ? (parsedAmount * (shVal / totalShares)).toFixed(2) : '0.00';
+                    return (
+                      <div key={mid} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-slate-800 truncate block">
+                            {member?.name || `Member ${mid}`}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {shVal} of {totalShares} shares (₹{calculatedAmt})
+                          </span>
+                        </div>
+                        <div className="relative w-20">
+                          <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            placeholder="1"
+                            value={sharesSplits[mid] || '1'}
+                            onChange={(e) => setSharesSplits({ ...sharesSplits, [mid]: e.target.value })}
+                            className="w-full pr-5 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-right bg-white"
+                          />
+                          <span className="absolute right-2 top-1 text-xs text-slate-400 font-bold">x</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Total Shares: {totalShares}</span>
+                  <span className="text-indigo-700">
+                    ≈ ₹{amountPerShare} / share
+                  </span>
                 </div>
               </div>
             )}
@@ -653,14 +888,10 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || (editingExpense && !canEdit)}
-              className={`px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer ${
-                editingExpense && !canEdit
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50'
-              }`}
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
             >
-              {isSubmitting ? 'Saving...' : editingExpense ? (canEdit ? 'Update Expense' : 'Read Only') : 'Save Expense'}
+              {isSubmitting ? 'Saving...' : editingExpense ? 'Update Expense' : 'Save Expense'}
             </button>
           </div>
         </form>

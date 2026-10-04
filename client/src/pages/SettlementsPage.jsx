@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function SettlementsPage() {
-  const { members, currentUser, openUpiModal, addToast } = useApp();
+  const { members, currentUser, openUpiModal, addToast, refreshMeta } = useApp();
 
   const [activeTab, setActiveTab] = useState('planner'); // 'planner' | 'budgets' | 'balances' | 'history'
   const [balances, setBalances] = useState([]);
@@ -189,6 +189,7 @@ export default function SettlementsPage() {
       await api.deletePayment(paymentId, currentUser?.id);
       addToast('Payment record removed. Balances recalculated.', 'success');
       fetchSettlementData();
+      if (refreshMeta) refreshMeta();
     } catch (err) {
       console.error('Error deleting payment:', err);
       addToast(err.message || 'Failed to delete payment record', 'error');
@@ -764,7 +765,7 @@ export default function SettlementsPage() {
                     const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
                     const canVerify = isReceiver || isDefaultAdmin;
                     const canRevert = isReceiver || isDefaultAdmin;
-                    const canDelete = isPayer || isReceiver || isDefaultAdmin;
+                    const canDelete = Boolean(currentUser);
                     return (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4 text-slate-600 font-medium whitespace-nowrap">

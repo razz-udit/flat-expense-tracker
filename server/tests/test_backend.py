@@ -389,3 +389,90 @@ def test_google_auth_flow(client):
     assert data_new["member"]["upi_id"] == "newroommate@okhdfcbank"
     assert data_new["token"] is not None
 
+
+def test_google_pay_splits_and_deletion_queries(client):
+    members = client.get("/api/members").json()
+    m1 = members[0]
+    m2 = members[1]
+    m3 = members[2]
+
+    # 1. Create expense with percentage split
+    pct_payload = {
+        "category_name": "Groceries",
+        "amount": 1000.00,
+        "paid_by": m1["id"],
+        "description": "Weekly Vegetable Market",
+        "expense_date": "2026-10-04",
+        "split_type": "percentage",
+        "splits": [
+            {"member_id": m1["id"], "percentage": 50.0},
+            {"member_id": m2["id"], "percentage": 25.0},
+            {"member_id": m3["id"], "percentage": 25.0}
+        ]
+    }
+    res_pct = client.post(f"/api/expenses?user_id={m1['id']}", json=pct_payload)
+    assert res_pct.status_code == 201
+    pct_exp = res_pct.json()
+    assert pct_exp["split_type"] == "percentage"
+    assert len(pct_exp["splits"]) == 3
+    s_map = {s["member_id"]: float(s["amount"]) for s in pct_exp["splits"]}
+    assert s_map[m1["id"]] == 500.00
+    assert s_map[m2["id"]] == 250.00
+    assert s_map[m3["id"]] == 250.00
+
+    # 2. Create expense with shares split
+    shares_payload = {
+        "category_name": "WiFi & Fiber",
+        "amount": 300.00,
+        "paid_by": m2["id"],
+        "description": "Monthly WiFi Bill",
+        "expense_date": "2026-10-04",
+        "split_type": "shares",
+        "splits": [
+            {"member_id": m1["id"], "shares": 2.0},
+            {"member_id": m2["id"], "shares": 1.0}
+        ]
+    }
+    res_sh = client.post(f"/api/expenses?user_id={m2['id']}", json=shares_payload)
+    assert res_sh.status_code == 201
+    sh_exp = res_sh.json()
+    assert sh_exp["split_type"] == "shares"
+    assert len(sh_exp["splits"]) == 2
+    sh_map = {s["member_id"]: float(s["amount"]) for s in sh_exp["splits"]}
+    assert sh_map[m1["id"]] == 200.00
+    assert sh_map[m2["id"]] == 100.00
+
+    # 3. Verify balances calculation query
+    balances = client.get("/api/balances").json()
+    total_net = sum(float(b["net_balance"]) for b in balances)
+    assert abs(total_net) < 0.05
+
+    # 4. Delete the percentage expense and verify clean DB removal
+    del_res = client.delete(f"/api/expenses/{pct_exp['id']}?user_id={m1['id']}")
+    assert del_res.status_code == 200
+    assert del_res.json()["message"] == "Expense deleted successfully"
+
+    # Verify expense is completely gone
+    get_del = client.get(f"/api/expenses/{pct_exp['id']}")
+    assert get_del.status_code == 404
+
+    # 5. Delete the shares expense
+    del_sh = client.delete(f"/api/expenses/{sh_exp['id']}?user_id={m2['id']}")
+    assert del_sh.status_code == 200
+
+    # 6. Create and delete payment
+    pay_res = client.post("/api/payments", json={
+        "from_member": m1["id"],
+        "to_member": m2["id"],
+        "amount": 150.00,
+        "payment_date": "2026-10-04",
+        "status": "Paid"
+    })
+    assert pay_res.status_code == 201
+    pay_id = pay_res.json()["id"]
+
+    del_pay = client.delete(f"/api/payments/{pay_id}?user_id={m1['id']}")
+    assert del_pay.status_code == 200
+    assert del_pay.json()["message"] == "Payment record deleted successfully"
+
+

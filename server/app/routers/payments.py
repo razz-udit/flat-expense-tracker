@@ -7,6 +7,7 @@ from app.models.payment import Payment
 from app.models.member import Member
 from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentOut
 from app.services.upi_service import generate_upi_link
+from app.services.auth_service import verify_access_token
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -158,21 +159,30 @@ def delete_payment(
     payment_id: int, 
     user_id: Optional[int] = Query(None),
     x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    caller_id = user_id or x_user_id
+    caller_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token_str = authorization.split("Bearer ", 1)[1].strip()
+        caller_id = verify_access_token(token_str)
+    if caller_id is None:
+        caller_id = user_id or x_user_id
+
     if caller_id is not None:
         first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
         admin_id = first_admin.id if first_admin else None
         if caller_id != payment.from_member and caller_id != payment.to_member and caller_id != admin_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Permission denied: Only the sender, receiver, or flat admin can delete this payment record."
-            )
+            caller_member = db.query(Member).filter(Member.id == caller_id, Member.is_active == True).first()
+            if not caller_member:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permission denied: You must be an active flat member to delete payment records."
+                )
 
     db.delete(payment)
     db.commit()

@@ -56,6 +56,59 @@ def compute_equal_splits(amount: Decimal, member_ids: List[int]) -> List[tuple[i
         result.append((mid, Decimal(cents) / Decimal(100)))
     return result
 
+def compute_percentage_splits(amount: Decimal, splits_data: list) -> List[tuple[int, Decimal]]:
+    """
+    Computes exact amounts from percentage splits, guaranteeing sum(splits) == amount down to the exact paisa.
+    """
+    total_cents = int(round(amount * 100))
+    # If amounts are already provided by client and match total
+    if all(getattr(s, "amount", None) is not None for s in splits_data):
+        return [(s.member_id, round(s.amount, 2)) for s in splits_data]
+
+    result = []
+    allocated_cents = 0
+    for s in splits_data:
+        pct = getattr(s, "percentage", None) or Decimal("0.00")
+        cents = int(round(Decimal(total_cents) * (pct / Decimal("100"))))
+        result.append([s.member_id, cents])
+        allocated_cents += cents
+
+    diff = total_cents - allocated_cents
+    if diff != 0 and result:
+        # Allocate any rounding difference (usually +1 or -1 cent) to the member with highest percentage
+        max_idx = max(range(len(splits_data)), key=lambda i: getattr(splits_data[i], "percentage", 0) or 0)
+        result[max_idx][1] += diff
+
+    return [(mid, Decimal(cents) / Decimal(100)) for mid, cents in result]
+
+def compute_shares_splits(amount: Decimal, splits_data: list) -> List[tuple[int, Decimal]]:
+    """
+    Computes exact amounts from shares/ratio splits (e.g. 1 share, 2 shares),
+    guaranteeing sum(splits) == amount down to the exact paisa.
+    """
+    total_cents = int(round(amount * 100))
+    if all(getattr(s, "amount", None) is not None for s in splits_data):
+        return [(s.member_id, round(s.amount, 2)) for s in splits_data]
+
+    total_shares = sum((getattr(s, "shares", None) or Decimal("1.00")) for s in splits_data)
+    if total_shares <= 0:
+        total_shares = Decimal(len(splits_data))
+
+    result = []
+    allocated_cents = 0
+    for s in splits_data:
+        sh = getattr(s, "shares", None) or Decimal("1.00")
+        cents = int(round(Decimal(total_cents) * (sh / total_shares)))
+        result.append([s.member_id, cents])
+        allocated_cents += cents
+
+    diff = total_cents - allocated_cents
+    if diff != 0 and result:
+        max_idx = max(range(len(splits_data)), key=lambda i: getattr(splits_data[i], "shares", 0) or 0)
+        result[max_idx][1] += diff
+
+    return [(mid, Decimal(cents) / Decimal(100)) for mid, cents in result]
+
 @router.get("", response_model=List[ExpenseOut])
 def get_expenses(
     category_id: Optional[int] = None,
@@ -111,14 +164,17 @@ def create_expense(
         caller_id = user_id or x_user_id
 
     if caller_id is not None and data.paid_by != caller_id:
-        caller_member = db.query(Member).filter(Member.id == caller_id).first()
-        target_member = db.query(Member).filter(Member.id == data.paid_by).first()
-        caller_name = caller_member.name if caller_member else f"Member {caller_id}"
-        target_name = target_member.name if target_member else f"Member {data.paid_by}"
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: You are logged in as {caller_name}. You cannot record an expense paid by {target_name}. Only {target_name} can record expenses they paid."
-        )
+        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+        admin_id = first_admin.id if first_admin else None
+        if caller_id != admin_id:
+            caller_member = db.query(Member).filter(Member.id == caller_id).first()
+            target_member = db.query(Member).filter(Member.id == data.paid_by).first()
+            caller_name = caller_member.name if caller_member else f"Member {caller_id}"
+            target_name = target_member.name if target_member else f"Member {data.paid_by}"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: You are logged in as {caller_name}. You cannot record an expense paid by {target_name}. Only {target_name} or the flat admin can record expenses they paid."
+            )
 
     # Validate category and payer
     category = None
@@ -146,14 +202,33 @@ def create_expense(
         member_ids = data.member_ids or ([s.member_id for s in data.splits] if data.splits else [])
         if not member_ids:
             raise HTTPException(status_code=400, detail="At least one member must be selected for equal split")
-        # Validate that all member IDs exist
         existing_members = db.query(Member.id).filter(Member.id.in_(member_ids)).all()
         existing_ids = {m[0] for m in existing_members}
         for mid in member_ids:
             if mid not in existing_ids:
                 raise HTTPException(status_code=400, detail=f"Member ID {mid} does not exist")
         split_records = compute_equal_splits(data.amount, member_ids)
-    else: # custom split
+    elif data.split_type == "percentage":
+        if not data.splits:
+            raise HTTPException(status_code=400, detail="Percentage splits must be specified")
+        member_ids = [s.member_id for s in data.splits]
+        existing_members = db.query(Member.id).filter(Member.id.in_(member_ids)).all()
+        existing_ids = {m[0] for m in existing_members}
+        for s in data.splits:
+            if s.member_id not in existing_ids:
+                raise HTTPException(status_code=400, detail=f"Member ID {s.member_id} does not exist")
+        split_records = compute_percentage_splits(data.amount, data.splits)
+    elif data.split_type == "shares":
+        if not data.splits:
+            raise HTTPException(status_code=400, detail="Shares splits must be specified")
+        member_ids = [s.member_id for s in data.splits]
+        existing_members = db.query(Member.id).filter(Member.id.in_(member_ids)).all()
+        existing_ids = {m[0] for m in existing_members}
+        for s in data.splits:
+            if s.member_id not in existing_ids:
+                raise HTTPException(status_code=400, detail=f"Member ID {s.member_id} does not exist")
+        split_records = compute_shares_splits(data.amount, data.splits)
+    else: # custom or exact split
         if not data.splits:
             raise HTTPException(status_code=400, detail="Custom splits must be specified")
         total_split = sum(s.amount for s in data.splits if s.amount is not None)
@@ -171,8 +246,6 @@ def create_expense(
             split_records.append((s.member_id, round(s.amount, 2)))
 
     # Category description validation:
-    # General categories (like Grocery, Provisions) require a description.
-    # Specific product categories (like LPG Gas, Electricity, WiFi, Maid) do not require a description and default to category name.
     GENERAL_CATEGORY_KEYWORDS = ["grocery", "groceries", "general", "supplies", "provisions", "other", "misc", "food", "market", "vegetable", "items"]
     cat_name_lower = (category.name or "").lower().strip()
     is_general = any(k in cat_name_lower for k in GENERAL_CATEGORY_KEYWORDS)
@@ -304,7 +377,17 @@ def update_expense(
             if not member_ids:
                 raise HTTPException(status_code=400, detail="At least one member required for split")
             split_records = compute_equal_splits(new_amount, member_ids)
-        else: # custom
+        elif new_split_type == "percentage":
+            splits_input = data.splits or []
+            if not splits_input:
+                raise HTTPException(status_code=400, detail="Percentage splits must be provided")
+            split_records = compute_percentage_splits(new_amount, splits_input)
+        elif new_split_type == "shares":
+            splits_input = data.splits or []
+            if not splits_input:
+                raise HTTPException(status_code=400, detail="Shares splits must be provided")
+            split_records = compute_shares_splits(new_amount, splits_input)
+        else: # custom or exact
             if data.splits:
                 splits_input = data.splits
             else:
@@ -346,6 +429,8 @@ def delete_expense(
             detail=f"Permission denied: You cannot delete this expense because it was paid by {payer_name}. Only {payer_name} can delete this expense."
         )
 
+    # Explicitly delete all splits first, then delete expense
+    db.query(ExpenseSplit).filter(ExpenseSplit.expense_id == expense_id).delete()
     db.delete(expense)
     db.commit()
     return {"message": "Expense deleted successfully"}

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function ExpensesPage() {
-  const { members, categories, currentUser, openAddExpense, addToast } = useApp();
+  const { members, categories, currentUser, openAddExpense, addToast, refreshMeta } = useApp();
 
   const [expenses, setExpenses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,18 +72,13 @@ export default function ExpensesPage() {
 
   const confirmDeleteExpense = async () => {
     if (!expenseToDelete) return;
-    const canDelete = currentUser && expenseToDelete.paid_by === currentUser.id;
-    if (!canDelete) {
-      addToast('Permission denied: You can only delete expenses that you personally paid for.', 'error');
-      setExpenseToDelete(null);
-      return;
-    }
     try {
       setIsDeleting(true);
       await api.deleteExpense(expenseToDelete.id, currentUser?.id);
       addToast('Expense deleted successfully. Balances recalculated.', 'success');
       setExpenseToDelete(null);
       fetchExpenses();
+      if (refreshMeta) refreshMeta();
     } catch (err) {
       console.error('Delete error:', err);
       addToast(err.message || 'Failed to delete expense', 'error');
@@ -253,7 +248,8 @@ export default function ExpensesPage() {
                 {expenses.map((exp) => {
                   const isExpanded = expandedExpenseId === exp.id;
                   const isPayer = Boolean(currentUser && exp.paid_by === currentUser.id);
-                  const canModify = isPayer;
+                  const isDefaultAdmin = Boolean(currentUser && members && members.length > 0 && currentUser.id === members[0]?.id);
+                  const canModify = Boolean(currentUser);
                   return (
                     <React.Fragment key={exp.id}>
                       <tr className="hover:bg-slate-50/80 transition-colors">
