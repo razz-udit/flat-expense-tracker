@@ -50,11 +50,12 @@ export default function LoginPage() {
   const [upiInput, setUpiInput] = useState('');
 
   // Google OAuth Client ID state
+  const DEFAULT_GOOGLE_CLIENT_ID = '477921185900-ggte5qkl6ua8aevgt3kj043lb4tlra28.apps.googleusercontent.com';
   const [googleClientId, setGoogleClientId] = useState(() => {
-    return import.meta.env?.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('flat_google_client_id') || '';
+    return import.meta.env?.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('flat_google_client_id') || DEFAULT_GOOGLE_CLIENT_ID;
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [clientIdInput, setClientIdInput] = useState(googleClientId);
+  const [clientIdInput, setClientIdInput] = useState(googleClientId || DEFAULT_GOOGLE_CLIENT_ID);
 
   const googleBtnRef = useRef(null);
 
