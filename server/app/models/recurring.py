@@ -14,6 +14,7 @@ class RecurringExpense(Base):
     split_type = Column(String(20), default="equal", nullable=False) # "equal" or "custom"
     split_members = Column(Text, nullable=True) # JSON array of member IDs or map of member_id -> amount
     frequency = Column(String(50), default="Monthly", nullable=False) # "Monthly", "Quarterly", "As Required"
+    last_generated_period = Column(String(20), nullable=True) # e.g. "2026-10"
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)

@@ -21,15 +21,55 @@ import {
 } from 'lucide-react';
 
 export default function SettlementsPage() {
-  const { members, currentUser, openUpiModal, addToast, refreshMeta } = useApp();
+  const { members, categories, currentUser, openUpiModal, addToast, refreshMeta } = useApp();
 
   const [activeTab, setActiveTab] = useState('planner'); // 'planner' | 'budgets' | 'balances' | 'history'
-  const [balances, setBalances] = useState([]);
-  const [settlements, setSettlements] = useState([]);
-  const [paymentsHistory, setPaymentsHistory] = useState([]);
-  const [categoryBudgets, setCategoryBudgets] = useState([]);
-  const [categoriesList, setCategoriesList] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [balances, setBalances] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('flat_settlements_balances');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [settlements, setSettlements] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('flat_settlements_planner');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [paymentsHistory, setPaymentsHistory] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('flat_settlements_payments');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [categoryBudgets, setCategoryBudgets] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('flat_settlements_budgets');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [categoriesList, setCategoriesList] = useState(categories || []);
+  const [isLoading, setIsLoading] = useState(() => balances.length === 0 && settlements.length === 0);
+
+  // Sync categoriesList with categories from context
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      setCategoriesList(categories);
+    }
+  }, [categories]);
 
   // Record Payment Modal State
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -50,21 +90,26 @@ export default function SettlementsPage() {
   const [isSavingBudget, setIsSavingBudget] = useState(false);
   const [equalizingTransferId, setEqualizingTransferId] = useState(null);
 
-  const fetchSettlementData = useCallback(async () => {
+  const fetchSettlementData = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
-      const [balancesData, settlementsData, paymentsData, budgetsData, catsData] = await Promise.all([
+      if (!silent) setIsLoading(true);
+      const [balancesData, settlementsData, paymentsData, budgetsData] = await Promise.all([
         api.getBalances(),
         api.getSettlements(),
         api.getPayments(),
-        api.getCategoryBudgets(),
-        api.getCategories()
+        api.getCategoryBudgets()
       ]);
       setBalances(balancesData);
       setSettlements(settlementsData);
       setPaymentsHistory(paymentsData);
       setCategoryBudgets(budgetsData);
-      setCategoriesList(catsData);
+
+      try {
+        sessionStorage.setItem('flat_settlements_balances', JSON.stringify(balancesData));
+        sessionStorage.setItem('flat_settlements_planner', JSON.stringify(settlementsData));
+        sessionStorage.setItem('flat_settlements_payments', JSON.stringify(paymentsData));
+        sessionStorage.setItem('flat_settlements_budgets', JSON.stringify(budgetsData));
+      } catch (_) {}
     } catch (err) {
       console.error('Error fetching settlement data:', err);
       addToast('Failed to load settlements and balances', 'error');
@@ -74,7 +119,8 @@ export default function SettlementsPage() {
   }, [addToast]);
 
   useEffect(() => {
-    fetchSettlementData();
+    const hasCache = balances.length > 0 || settlements.length > 0;
+    fetchSettlementData(hasCache);
   }, [fetchSettlementData]);
 
   const handleOpenRecordModal = (prefill = null) => {
@@ -139,21 +185,29 @@ export default function SettlementsPage() {
       return;
     }
 
+    const parsedFrom = parseInt(fromMember, 10);
+    const parsedTo = parseInt(toMember, 10);
+    if (currentUser && !isDefaultAdmin && parsedFrom !== currentUser.id && parsedTo !== currentUser.id) {
+      addToast('Authorization error: You can only record settlements where you are the sender or receiver.', 'error');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await api.createPayment({
-        from_member: parseInt(fromMember, 10),
-        to_member: parseInt(toMember, 10),
+        from_member: parsedFrom,
+        to_member: parsedTo,
         amount: parsedAmt,
         payment_date: paymentDate,
         status: status,
         payment_method: paymentMethod,
         transaction_reference: transactionReference.trim() || null,
         notes: notes.trim() || null
-      });
+      }, currentUser?.id);
       addToast('Payment recorded successfully!', 'success');
       handleCloseRecordModal();
       fetchSettlementData();
+      if (refreshMeta) refreshMeta();
     } catch (err) {
       console.error('Error recording payment:', err);
       addToast(err.message || 'Failed to record payment', 'error');
@@ -367,7 +421,9 @@ export default function SettlementsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {settlements.map((s, idx) => (
+              {settlements.map((s, idx) => {
+                const isPartyInSettlement = Boolean(currentUser && (currentUser.id === s.from_member_id || currentUser.id === s.to_member_id || isDefaultAdmin));
+                return (
                 <div
                   key={idx}
                   className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between space-y-4 hover:border-slate-400/80 transition-all"
@@ -438,24 +494,36 @@ export default function SettlementsPage() {
                       <span>Pay UPI</span>
                     </button>
 
-                    <button
-                      onClick={() =>
-                        handleOpenRecordModal({
-                          from_member_id: s.from_member_id,
-                          to_member_id: s.to_member_id,
-                          amount: s.amount,
-                          notes: `Settlement from ${s.from_member_name} to ${s.to_member_name}`,
-                        })
-                      }
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Mark Paid</span>
-                    </button>
+                    {isPartyInSettlement ? (
+                      <button
+                        onClick={() =>
+                          handleOpenRecordModal({
+                            from_member_id: s.from_member_id,
+                            to_member_id: s.to_member_id,
+                            amount: s.amount,
+                            notes: `Settlement from ${s.from_member_name} to ${s.to_member_name}`,
+                          })
+                        }
+                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Mark Paid</span>
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="flex items-center justify-center gap-1 py-2 px-2.5 rounded-xl bg-slate-100 text-slate-400 text-[11px] font-semibold cursor-not-allowed border border-slate-200/60"
+                        title="Only the sender, receiver, or flat admin can settle this payment"
+                      >
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Parties Only</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
+          </div>
           )}
         </div>
       )}

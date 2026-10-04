@@ -30,28 +30,51 @@ export default function DashboardPage() {
     addToast
   } = useApp();
 
-  const [dashboardData, setDashboardData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const viewerId = currentUser?.id || activeMemberId;
+
+  const [dashboardData, setDashboardData] = useState(() => {
+    try {
+      if (viewerId) {
+        const cached = sessionStorage.getItem(`flat_dashboard_cache_${viewerId}`);
+        if (cached) return JSON.parse(cached);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isLoading, setIsLoading] = useState(!dashboardData);
   const [expenseFilterTab, setExpenseFilterTab] = useState('user'); // 'user' | 'all'
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboard = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
-      const data = await api.getDashboard({ viewer_id: currentUser?.id || activeMemberId });
+      if (!silent) setIsLoading(true);
+      const data = await api.getDashboard({ viewer_id: viewerId });
       setDashboardData(data);
+      if (viewerId) {
+        try {
+          sessionStorage.setItem(`flat_dashboard_cache_${viewerId}`, JSON.stringify(data));
+        } catch (_) {}
+      }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
       addToast('Failed to load dashboard data', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser, activeMemberId, addToast]);
+  }, [viewerId, addToast]);
 
   useEffect(() => {
-    fetchDashboard();
+    const hasCache = !!dashboardData;
+    fetchDashboard(hasCache);
   }, [fetchDashboard]);
 
   const handleQuickMarkPaid = async (settlement) => {
+    if (!currentUser) {
+      addToast('Please log in to record payments', 'error');
+      return;
+    }
     try {
       const todayStr = new Date().toISOString().split('T')[0];
       await api.createPayment({
@@ -61,9 +84,10 @@ export default function DashboardPage() {
         payment_date: todayStr,
         status: 'Paid',
         notes: `Settlement from ${settlement.from_member_name} to ${settlement.to_member_name}`
-      });
+      }, currentUser.id);
       addToast(`Payment of ₹${parseFloat(settlement.amount).toLocaleString('en-IN')} recorded as Paid!`, 'success');
       fetchDashboard();
+      if (refreshMeta) refreshMeta();
     } catch (err) {
       console.error('Quick mark paid error:', err);
       addToast(err.message || 'Failed to record settlement', 'error');
@@ -439,12 +463,25 @@ export default function DashboardPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-bold text-slate-900 truncate">{exp.description}</div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
                           <span className="font-semibold text-slate-700">{exp.category?.name}</span>
                           <span>•</span>
                           <span>Paid by {isPayer ? <strong className="text-slate-900">You</strong> : exp.payer?.name}</span>
                           <span>•</span>
-                          <span>{exp.expense_date}</span>
+                          <span className={`font-bold ${exp.payment_method === 'Cash' ? 'text-amber-700' : 'text-slate-600'}`}>
+                            {exp.payment_method === 'Cash' ? 'Cash' : 'UPI'}
+                          </span>
+                          <span>•</span>
+                          {exp.verification_status === 'Confirmed' ? (
+                            <span className="text-emerald-700 font-bold">✓ Confirmed</span>
+                          ) : exp.verification_status === 'Disputed / Flagged' ? (
+                            <span className="text-rose-600 font-bold">⚠️ Disputed</span>
+                          ) : (
+                            <span className="text-amber-700 font-medium">Pending</span>
+                          )}
+                          {exp.receipt_url && (
+                            <span className="text-emerald-700 font-bold">📷 Proof</span>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -14,8 +14,12 @@ class Expense(Base):
     expense_date = Column(Date, nullable=False, index=True)
     billing_period_start = Column(Date, nullable=True)
     billing_period_end = Column(Date, nullable=True)
-    receipt_url = Column(String(500), nullable=True)
-    split_type = Column(String(20), default="equal", nullable=False) # "equal" or "custom"
+    receipt_url = Column(Text, nullable=True)
+    payment_method = Column(String(50), default="UPI", nullable=False)
+    verification_status = Column(String(50), default="Pending Confirmation", nullable=False)
+    confirmed_by = Column(Text, nullable=True)
+    split_type = Column(String(20), default="equal", nullable=False) # "equal", "custom", "percentage", "shares"
+    recurring_id = Column(Integer, ForeignKey("recurring_expenses.id", ondelete="SET NULL"), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
@@ -32,6 +36,8 @@ class ExpenseSplit(Base):
     expense_id = Column(Integer, ForeignKey("expenses.id", ondelete="CASCADE"), nullable=False)
     member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
+    shares = Column(Numeric(10, 2), nullable=True)
+    percentage = Column(Numeric(5, 2), nullable=True)
 
     expense = relationship("Expense", back_populates="splits")
     member = relationship("Member", back_populates="splits")

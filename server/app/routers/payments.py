@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.payment import Payment
 from app.models.member import Member
 from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentOut
 from app.services.upi_service import generate_upi_link
-from app.services.auth_service import verify_access_token
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -45,18 +45,41 @@ def get_payments(
     return [attach_upi_link(p) for p in payments]
 
 @router.post("", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
-def create_payment(data: PaymentCreate, db: Session = Depends(get_db)):
+def create_payment(
+    data: PaymentCreate, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if data.from_member == data.to_member:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot record a settlement to yourself. Sender and receiver must be different members."
+        )
+
+    if data.amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment amount must be greater than 0."
+        )
+
     payer = db.query(Member).filter(Member.id == data.from_member).first()
     receiver = db.query(Member).filter(Member.id == data.to_member).first()
     if not payer or not receiver:
         raise HTTPException(status_code=400, detail="Invalid payer or receiver member")
+
+    is_admin = getattr(current_user, "is_admin", False)
+    if current_user.id != data.from_member and current_user.id != data.to_member and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: You cannot record settlements between {payer.name} and {receiver.name}."
+        )
 
     payment = Payment(
         from_member=data.from_member,
         to_member=data.to_member,
         amount=round(data.amount, 2),
         payment_date=data.payment_date,
-        status=data.status,
+        status=data.status or "Paid",
         payment_method=data.payment_method or "UPI",
         transaction_reference=data.transaction_reference.strip() if data.transaction_reference else None,
         notes=data.notes.strip() if data.notes else None
@@ -83,8 +106,7 @@ def get_payment(payment_id: int, db: Session = Depends(get_db)):
 def update_payment(
     payment_id: int, 
     data: PaymentUpdate, 
-    user_id: Optional[int] = Query(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     payment = db.query(Payment).options(
@@ -94,21 +116,20 @@ def update_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    caller_id = user_id or x_user_id
-    if caller_id is not None:
-        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-        admin_id = first_admin.id if first_admin else None
-        if caller_id != payment.from_member and caller_id != payment.to_member and caller_id != admin_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Permission denied: Only the sender, receiver, or flat admin can modify this payment."
-            )
+    is_admin = getattr(current_user, "is_admin", False)
+    if current_user.id != payment.from_member and current_user.id != payment.to_member and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Only the sender, receiver, or flat admin can modify this payment."
+        )
 
     if data.status is not None:
         payment.status = data.status
         if data.status == "Paid" and not payment.verified_at:
             payment.verified_at = datetime.now()
     if data.amount is not None:
+        if data.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be greater than 0.")
         payment.amount = round(data.amount, 2)
     if data.payment_method is not None:
         payment.payment_method = data.payment_method
@@ -126,8 +147,7 @@ def update_payment(
 @router.post("/{payment_id}/verify", response_model=PaymentOut)
 def verify_payment(
     payment_id: int, 
-    user_id: Optional[int] = Query(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     payment = db.query(Payment).options(
@@ -137,16 +157,13 @@ def verify_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    caller_id = user_id or x_user_id
-    if caller_id is not None:
-        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-        admin_id = first_admin.id if first_admin else None
-        if caller_id != payment.to_member and caller_id != admin_id:
-            receiver_name = payment.receiver.name if payment.receiver else f"Member {payment.to_member}"
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: Only {receiver_name} (the receiver) or flat admin can verify this settlement."
-            )
+    is_admin = getattr(current_user, "is_admin", False)
+    if current_user.id != payment.to_member and not is_admin:
+        receiver_name = payment.receiver.name if payment.receiver else f"Member {payment.to_member}"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: Only {receiver_name} (the receiver) or flat admin can verify this settlement."
+        )
 
     payment.status = "Paid"
     payment.verified_at = datetime.now()
@@ -157,32 +174,19 @@ def verify_payment(
 @router.delete("/{payment_id}")
 def delete_payment(
     payment_id: int, 
-    user_id: Optional[int] = Query(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
-    authorization: Optional[str] = Header(None),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    caller_id = None
-    if authorization and authorization.startswith("Bearer "):
-        token_str = authorization.split("Bearer ", 1)[1].strip()
-        caller_id = verify_access_token(token_str)
-    if caller_id is None:
-        caller_id = user_id or x_user_id
-
-    if caller_id is not None:
-        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-        admin_id = first_admin.id if first_admin else None
-        if caller_id != payment.from_member and caller_id != payment.to_member and caller_id != admin_id:
-            caller_member = db.query(Member).filter(Member.id == caller_id, Member.is_active == True).first()
-            if not caller_member:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Permission denied: You must be an active flat member to delete payment records."
-                )
+    is_admin = getattr(current_user, "is_admin", False)
+    if current_user.id != payment.from_member and current_user.id != payment.to_member and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Only the sender, receiver, or flat admin can delete this settlement record."
+        )
 
     db.delete(payment)
     db.commit()

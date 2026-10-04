@@ -7,3 +7,9 @@ services:
     envVars:
       - key: PORT
         value: 8000
+      - key: APP_ENV
+        value: production
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 1440

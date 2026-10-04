@@ -16,6 +16,8 @@ class Member(Base):
     google_id = Column(String(100), unique=True, index=True, nullable=True)
     avatar_url = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    token_version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     expenses_paid = relationship("Expense", back_populates="payer", foreign_keys="Expense.paid_by")

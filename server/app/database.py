@@ -24,6 +24,12 @@ try:
             pass
         logger.info(f"Connected to remote database successfully: {engine.url.render_as_string(hide_password=True)}")
 except Exception as e:
+    if settings.APP_ENV == "production":
+        logger.critical(
+            f"FATAL: Could not connect to production DATABASE_URL. "
+            f"Refusing to fall back to SQLite in production. Reason: {e}"
+        )
+        raise RuntimeError(f"Production database connection failed: {e}")
     logger.warning(
         f"Could not connect to configured DATABASE_URL ({db_url.split('@')[-1] if '@' in db_url else db_url}). "
         f"Reason: {e}. Falling back to local SQLite database (sqlite:///./flat_expenses.db)."

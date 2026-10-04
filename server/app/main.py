@@ -22,11 +22,68 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     try:
         with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id VARCHAR(100);"))
-            conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);"))
+            is_sqlite = "sqlite" in str(engine.url)
+            if is_sqlite:
+                m_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(members);")).fetchall()]
+                if "google_id" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN google_id VARCHAR(100);"))
+                if "avatar_url" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN avatar_url VARCHAR(500);"))
+                if "is_admin" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL;"))
+                if "token_version" not in m_cols:
+                    conn.execute(text("ALTER TABLE members ADD COLUMN token_version INTEGER DEFAULT 1 NOT NULL;"))
+
+                e_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(expenses);")).fetchall()]
+                if "receipt_url" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN receipt_url TEXT;"))
+                if "payment_method" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(50) DEFAULT 'UPI';"))
+                if "verification_status" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN verification_status VARCHAR(50) DEFAULT 'Pending Confirmation';"))
+                if "confirmed_by" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN confirmed_by TEXT;"))
+                if "recurring_id" not in e_cols:
+                    conn.execute(text("ALTER TABLE expenses ADD COLUMN recurring_id INTEGER;"))
+
+                s_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(expense_splits);")).fetchall()]
+                if "shares" not in s_cols:
+                    conn.execute(text("ALTER TABLE expense_splits ADD COLUMN shares NUMERIC(10, 2);"))
+                if "percentage" not in s_cols:
+                    conn.execute(text("ALTER TABLE expense_splits ADD COLUMN percentage NUMERIC(5, 2);"))
+
+                r_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(recurring_expenses);")).fetchall()]
+                if "last_generated_period" not in r_cols:
+                    conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN last_generated_period VARCHAR(20);"))
+            else:
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id VARCHAR(100);"))
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE NOT NULL;"))
+                conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 1 NOT NULL;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'UPI';"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Pending Confirmation';"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS confirmed_by TEXT;"))
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurring_id INTEGER;"))
+                conn.execute(text("ALTER TABLE expense_splits ADD COLUMN IF NOT EXISTS shares NUMERIC(10, 2);"))
+                conn.execute(text("ALTER TABLE expense_splits ADD COLUMN IF NOT EXISTS percentage NUMERIC(5, 2);"))
+                conn.execute(text("ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS last_generated_period VARCHAR(20);"))
             conn.commit()
-    except Exception:
-        pass
+
+            # Ensure at least one admin exists if members are present
+            from app.models.member import Member
+            db_session = SessionLocal()
+            try:
+                admin_exists = db_session.query(Member).filter(Member.is_admin == True, Member.is_active == True).first()
+                if not admin_exists:
+                    first_member = db_session.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+                    if first_member:
+                        first_member.is_admin = True
+                        db_session.commit()
+            finally:
+                db_session.close()
+    except Exception as e:
+        print(f"Database migration notice: {e}")
     # Seed default members and categories if table is fresh
     db = SessionLocal()
     try:

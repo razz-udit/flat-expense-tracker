@@ -1,8 +1,11 @@
 import json
+import logging
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("uvicorn.error")
 
 SERVER_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = SERVER_DIR.parent
@@ -15,8 +18,24 @@ ENV_FILES = (
 
 class Settings(BaseSettings):
     APP_NAME: str = "Flat Expense & Payment Manager"
+    APP_ENV: str = "development" # "development", "test", "production"
+    
+    # Database
     DATABASE_URL: str = "sqlite:///./flat_expenses.db"
-    CORS_ORIGINS: Union[str, List[str]] = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000,https://flat-payment-tracker.onrender.com"
+
+    # Authentication & Session Security
+    AUTH_SECRET: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours default
+    
+    # Google OAuth
+    GOOGLE_CLIENT_ID: Optional[str] = None
+
+    # CORS
+    CORS_ORIGINS: Union[str, List[str]] = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:8000,http://127.0.0.1:8000,"
+        "https://flat-payment-tracker.onrender.com"
+    )
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -51,6 +70,18 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
             url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
         return url
+
+    def get_auth_secret(self) -> str:
+        """Returns the auth secret, providing an ephemeral dev secret in non-production environments."""
+        if self.AUTH_SECRET and len(self.AUTH_SECRET) >= 16:
+            return self.AUTH_SECRET
+        if self.APP_ENV == "production":
+            raise RuntimeError(
+                "CRITICAL: AUTH_SECRET must be configured with at least 32 characters in production. "
+                "Application startup aborted."
+            )
+        # Safe default for local development and automated testing only
+        return "dev-local-jwt-secret-session-key-32chars-min!!"
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILES,

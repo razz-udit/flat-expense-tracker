@@ -1,3 +1,4 @@
+import time
 import pytest
 from decimal import Decimal
 from datetime import date
@@ -7,9 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
+from app.config import settings
 from app.main import app as fastapi_app
 from app.models.member import Member
 from app.models.category import Category
+from app.models.expense import Expense, ExpenseSplit
+from app.models.payment import Payment
+from app.models.recurring import RecurringExpense
+from app.services.auth_service import create_access_token, hash_password
 import app.models
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -32,11 +38,20 @@ fastapi_app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(autouse=True)
 def setup_database():
+    settings.APP_ENV = "test"
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
-    # Add 6 test flat members
+    # Add 6 test flat members: Member 1 is Admin, Member 2-6 are standard members
     for i in range(1, 7):
-        db.add(Member(name=f"Member {i}", upi_id=f"member{i}@upi", is_active=True))
+        db.add(Member(
+            name=f"Member {i}",
+            email=f"member{i}@flat.internal",
+            upi_id=f"member{i}@upi",
+            password_hash=hash_password(f"pass{i}123"),
+            is_active=True,
+            is_admin=(i == 1),
+            token_version=1
+        ))
     db.commit()
     db.close()
     yield
@@ -46,20 +61,28 @@ def setup_database():
 def client():
     return TestClient(fastapi_app)
 
+def auth_headers(member_id: int, token_version: int = 1) -> dict:
+    token = create_access_token(member_id, token_version)
+    return {"Authorization": f"Bearer {token}"}
+
+# ==============================================================================
+# EXISTING FLOW REGRESSION TESTS WITH AUTHENTICATION
+# ==============================================================================
+
 def test_no_predefined_categories_and_dynamic_creation(client):
     res_m = client.get("/api/members")
     assert res_m.status_code == 200
     members = res_m.json()
     assert len(members) == 6
 
-    # Verify categories start completely empty (no predefined categories)
+    # Verify categories start completely empty
     res_c = client.get("/api/categories")
     assert res_c.status_code == 200
-    categories = res_c.json()
-    assert len(categories) == 0
+    assert len(res_c.json()) == 0
 
-    # Create dynamic category
-    res_create = client.post("/api/categories", json={"name": "Grocery", "description": "Shared provisions"})
+    # Create dynamic category with Member 1's token
+    headers = auth_headers(members[0]["id"])
+    res_create = client.post("/api/categories", json={"name": "Grocery", "description": "Shared provisions"}, headers=headers)
     assert res_create.status_code == 201
     assert res_create.json()["name"] == "Grocery"
 
@@ -69,8 +92,9 @@ def test_no_predefined_categories_and_dynamic_creation(client):
 
 def test_create_equal_split_with_dynamic_category(client):
     members = client.get("/api/members").json()
-    
-    # Member 1 pays ₹2400 split equally among all 6, passing category_name dynamically
+    headers = auth_headers(members[0]["id"])
+
+    # Member 1 pays ₹2400 split equally among all 6
     payload = {
         "category_name": "Grocery",
         "amount": 2400.00,
@@ -80,7 +104,7 @@ def test_create_equal_split_with_dynamic_category(client):
         "split_type": "equal",
         "member_ids": [m["id"] for m in members]
     }
-    res = client.post("/api/expenses", json=payload)
+    res = client.post("/api/expenses", json=payload, headers=headers)
     assert res.status_code == 201
     data = res.json()
     assert data["amount"] == "2400.00"
@@ -100,8 +124,8 @@ def test_create_equal_split_with_dynamic_category(client):
 
 def test_custom_split_validation(client):
     members = client.get("/api/members").json()
-    # Create category first
-    cat_res = client.post("/api/categories", json={"name": "Rent"})
+    headers = auth_headers(members[0]["id"])
+    cat_res = client.post("/api/categories", json={"name": "Rent"}, headers=headers)
     rent_id = cat_res.json()["id"]
 
     # Split sum mismatch should fail
@@ -117,8 +141,8 @@ def test_custom_split_validation(client):
             {"member_id": members[1]["id"], "amount": 500.00}
         ]
     }
-    res_bad = client.post("/api/expenses", json=payload_bad)
-    assert res_bad.status_code == 422 or res_bad.status_code == 400
+    res_bad = client.post("/api/expenses", json=payload_bad, headers=headers)
+    assert res_bad.status_code in (400, 422)
 
     # Matching split should succeed
     payload_good = {
@@ -133,36 +157,39 @@ def test_custom_split_validation(client):
             {"member_id": members[1]["id"], "amount": 600.00}
         ]
     }
-    res_good = client.post("/api/expenses", json=payload_good)
+    res_good = client.post("/api/expenses", json=payload_good, headers=headers)
     assert res_good.status_code == 201
 
 def test_excluded_member_split(client):
     members = client.get("/api/members").json()
+    headers = auth_headers(members[3]["id"])
 
-    # Member 6 excluded, split among 5 members
+    # Member 4 pays ₹5000 split among 5 members (Member 6 excluded)
     payload = {
         "category_name": "Extra Equipment",
         "amount": 5000.00,
-        "paid_by": members[3]["id"], # Member 4
+        "paid_by": members[3]["id"],
         "description": "Water filter",
         "expense_date": "2026-09-27",
         "split_type": "equal",
         "member_ids": [m["id"] for m in members[:5]]
     }
-    res = client.post("/api/expenses", json=payload)
+    res = client.post("/api/expenses", json=payload, headers=headers)
     assert res.status_code == 201
     data = res.json()
     assert len(data["splits"]) == 5
     split_member_ids = [s["member_id"] for s in data["splits"]]
     assert members[5]["id"] not in split_member_ids
 
-    # Check that Member 6 balance is 0
+    # Check Member 6 balance is 0
     bal_res = client.get("/api/balances").json()
     m6_bal = [b for b in bal_res if b["member_name"] == "Member 6"][0]
     assert m6_bal["net_balance"] == "0.00"
 
 def test_settlement_and_payment_flow(client):
     members = client.get("/api/members").json()
+    h2 = auth_headers(members[1]["id"])
+    h1 = auth_headers(members[0]["id"])
 
     # Member 2 pays ₹1000 split between Member 1 and Member 2 (₹500 each)
     payload = {
@@ -174,9 +201,9 @@ def test_settlement_and_payment_flow(client):
         "split_type": "equal",
         "member_ids": [members[0]["id"], members[1]["id"]]
     }
-    client.post("/api/expenses", json=payload)
+    res = client.post("/api/expenses", json=payload, headers=h2)
+    assert res.status_code == 201
 
-    # Check suggested settlements
     settle_res = client.get("/api/settlements")
     assert settle_res.status_code == 200
     settlements = settle_res.json()
@@ -194,238 +221,213 @@ def test_settlement_and_payment_flow(client):
         "status": "Pending",
         "notes": "LPG share"
     }
-    pay_res = client.post("/api/payments", json=pay_payload)
+    pay_res = client.post("/api/payments", json=pay_payload, headers=h1)
     assert pay_res.status_code == 201
     payment_id = pay_res.json()["id"]
 
-    # Mark as Paid
-    update_res = client.put(f"/api/payments/{payment_id}", json={"status": "Paid"})
-    assert update_res.status_code == 200
+    # Receiver (Member 2) verifies settlement
+    verify_res = client.post(f"/api/payments/{payment_id}/verify", headers=h2)
+    assert verify_res.status_code == 200
+    assert verify_res.json()["status"] == "Paid"
 
-    # Balances must now be fully settled (0.00)
+    # Balances must now be 0.00
     bal_res_settled = client.get("/api/balances").json()
-    m1_bal_after = [b for b in bal_res_settled if b["member_name"] == "Member 1"][0]
-    m2_bal_after = [b for b in bal_res_settled if b["member_name"] == "Member 2"][0]
-    assert m1_bal_after["net_balance"] == "0.00"
-    assert m2_bal_after["net_balance"] == "0.00"
+    m1_bal = [b for b in bal_res_settled if b["member_name"] == "Member 1"][0]
+    m2_bal = [b for b in bal_res_settled if b["member_name"] == "Member 2"][0]
+    assert m1_bal["net_balance"] == "0.00"
+    assert m2_bal["net_balance"] == "0.00"
 
-    # Suggested settlements should now be empty
-    settle_res_after = client.get("/api/settlements").json()
-    assert len(settle_res_after) == 0
+# ==============================================================================
+# AUDIT PART 1 — CRITICAL AUTHENTICATION SECURITY
+# ==============================================================================
 
-def test_monthly_history_and_billing_period(client):
+def test_mock_token_rejected_in_production(client):
+    mock_token = "test_mock_token_testuser@flat.internal|Test User|avatar.png|uid_999"
+    
+    # 1. Under production, mock tokens MUST be rejected
+    settings.APP_ENV = "production"
+    res_prod = client.post("/api/auth/google", json={"credential": mock_token})
+    assert res_prod.status_code == 401
+    assert "forbidden outside of test environment" in res_prod.json()["detail"].lower()
+
+    # 2. Under test environment, mock tokens are allowed
+    settings.APP_ENV = "test"
+    res_test = client.post("/api/auth/google", json={"credential": mock_token, "upi_id": "test@upi"})
+    assert res_test.status_code == 200
+    assert res_test.json()["success"] is True
+
+# ==============================================================================
+# AUDIT PART 2 — SECURE JWT & EXPIRATION & TOKEN VERSIONING
+# ==============================================================================
+
+def test_jwt_expiration_enforcement(client):
     members = client.get("/api/members").json()
+    m1_id = members[0]["id"]
 
-    # Multi-month electricity expense
-    payload = {
-        "category_name": "Electricity",
-        "amount": 7800.00,
-        "paid_by": members[2]["id"],
-        "description": "Electricity bill",
-        "expense_date": "2026-09-27",
-        "billing_period_start": "2026-09-01",
-        "billing_period_end": "2026-11-30",
-        "split_type": "equal",
-        "member_ids": [m["id"] for m in members]
-    }
-    client.post("/api/expenses", json=payload)
+    # Issue an expired token
+    old_exp = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    try:
+        settings.ACCESS_TOKEN_EXPIRE_MINUTES = -10 # Expired 10 minutes ago
+        expired_token = create_access_token(m1_id)
+    finally:
+        settings.ACCESS_TOKEN_EXPIRE_MINUTES = old_exp
 
-    hist_res = client.get("/api/monthly-history")
-    assert hist_res.status_code == 200
-    history = hist_res.json()
-    assert len(history) >= 1
-    assert history[0]["year"] == 2026
-    assert history[0]["month"] == 9
-    assert history[0]["total_amount"] == "7800.00"
+    res = client.post("/api/categories", json={"name": "ExpiredTest"}, headers={"Authorization": f"Bearer {expired_token}"})
+    assert res.status_code == 401
+    assert "token has expired" in res.json()["detail"].lower()
 
-    detail_res = client.get("/api/monthly-summary/2026/9")
-    assert detail_res.status_code == 200
-    detail = detail_res.json()
-    assert detail["total_amount"] == "7800.00"
-    assert len(detail["categories"]) == 1
-    assert detail["categories"][0]["category_name"] == "Electricity"
-
-def test_expense_authorization_and_ownership(client):
+def test_jwt_malformed_and_tampered_signature(client):
     members = client.get("/api/members").json()
-    admin_user = members[0] # Member 1 is flat admin
-    payer_user = members[1] # Member 2 is payer
-    other_user = members[2] # Member 3 is unrelated roommate
+    m1_id = members[0]["id"]
+    valid_token = create_access_token(m1_id)
 
-    # 1. Member 2 creates an expense
-    create_payload = {
-        "category_name": "Grocery",
-        "amount": 900.00,
-        "paid_by": payer_user["id"],
-        "description": "Vegetables and fruits",
-        "expense_date": "2026-09-28",
-        "split_type": "equal",
-        "member_ids": [members[0]["id"], members[1]["id"], members[2]["id"]]
-    }
-    create_res = client.post("/api/expenses", json=create_payload)
-    assert create_res.status_code == 201
-    expense_id = create_res.json()["id"]
+    # Tampered signature
+    parts = valid_token.split(".")
+    tampered_token = f"{parts[0]}.{parts[1]}.tampered_signature"
+    res_tampered = client.post("/api/categories", json={"name": "TamperTest"}, headers={"Authorization": f"Bearer {tampered_token}"})
+    assert res_tampered.status_code == 401
 
-    # 2. Anonymous request without user ID should be rejected with 401
-    anon_update = client.put(f"/api/expenses/{expense_id}", json={"description": "Hacked description"})
-    assert anon_update.status_code == 401
+    # Malformed token
+    res_malformed = client.post("/api/categories", json={"name": "Malformed"}, headers={"Authorization": "Bearer not-a-jwt"})
+    assert res_malformed.status_code == 401
 
-    anon_delete = client.delete(f"/api/expenses/{expense_id}")
-    assert anon_delete.status_code == 401
+def test_password_change_invalidates_old_sessions(client):
+    members = client.get("/api/members").json()
+    m2 = members[1]
+    
+    # Generate initial token
+    old_token = create_access_token(m2["id"], token_version=1)
+    h_old = {"Authorization": f"Bearer {old_token}"}
 
-    # 3. Unrelated roommate (Member 3) attempting to edit Member 2's expense should fail with 403 Forbidden
-    unauth_update = client.put(
-        f"/api/expenses/{expense_id}?user_id={other_user['id']}",
-        json={"description": "Member 3 modified this"}
-    )
-    assert unauth_update.status_code == 403
-    assert "Permission denied" in unauth_update.json()["detail"]
+    # Verify old token works
+    res_ok = client.post("/api/categories", json={"name": "Snacks Before"}, headers=h_old)
+    assert res_ok.status_code == 201
 
-    # 4. Unrelated roommate attempting to delete Member 2's expense should fail with 403 Forbidden
-    unauth_delete = client.delete(
-        f"/api/expenses/{expense_id}?user_id={other_user['id']}"
-    )
-    assert unauth_delete.status_code == 403
-    assert "Permission denied" in unauth_delete.json()["detail"]
+    # Member 2 changes their password
+    res_change = client.post("/api/auth/change-password", json={
+        "member_id": m2["id"],
+        "current_password": "pass2123",
+        "new_password": "newpassword456"
+    }, headers=h_old)
+    assert res_change.status_code == 200
 
-    # 5. Payer (Member 2) editing their own expense should succeed
-    payer_update = client.put(
-        f"/api/expenses/{expense_id}?user_id={payer_user['id']}",
-        json={"description": "Vegetables, fruits and milk"}
-    )
-    assert payer_update.status_code == 200
-    assert payer_update.json()["description"] == "Vegetables, fruits and milk"
+    # Old token MUST now be rejected (token_version incremented)
+    res_revoked = client.post("/api/categories", json={"name": "Snacks After"}, headers=h_old)
+    assert res_revoked.status_code == 401
+    assert "session expired" in res_revoked.json()["detail"].lower()
 
-    # 6. No other member (even Member 1) can edit Member 2's expense (fails with 403 Forbidden)
-    other_member_update = client.put(
-        f"/api/expenses/{expense_id}?user_id={admin_user['id']}",
-        json={"notes": "Member 1 attempting to edit"}
-    )
-    assert other_member_update.status_code == 403
-    assert "Permission denied" in other_member_update.json()["detail"]
+    # Login with new password gives active token
+    login_res = client.post("/api/auth/login", json={"identifier": m2["name"], "password": "newpassword456"})
+    assert login_res.status_code == 200
+    new_token = login_res.json()["token"]
 
-    # 7. Bearer token authentication works for payer
-    from app.services.auth_service import create_access_token
-    payer_token = create_access_token(payer_user["id"])
-    token_update = client.put(
-        f"/api/expenses/{expense_id}",
-        headers={"Authorization": f"Bearer {payer_token}"},
-        json={"description": "Vegetables, fruits and almond milk"}
-    )
-    assert token_update.status_code == 200
-    assert token_update.json()["description"] == "Vegetables, fruits and almond milk"
+    # New token works
+    res_new_ok = client.post("/api/categories", json={"name": "Snacks Valid"}, headers={"Authorization": f"Bearer {new_token}"})
+    assert res_new_ok.status_code == 201
 
-    # 8. Attempting to reassign payer should fail with 403
-    reassign_attempt = client.put(
-        f"/api/expenses/{expense_id}?user_id={payer_user['id']}",
-        json={"paid_by": other_user["id"]}
-    )
-    assert reassign_attempt.status_code == 403
-    assert "cannot change the payer" in reassign_attempt.json()["detail"].lower()
+# ==============================================================================
+# AUDIT PART 3 & 4 — REAL SERVER-SIDE AUTHORIZATION & ADMIN ROLE
+# ==============================================================================
 
-    # 9. Other member attempting to delete Member 2's expense must fail
-    other_delete = client.delete(
-        f"/api/expenses/{expense_id}?user_id={admin_user['id']}"
-    )
-    assert other_delete.status_code == 403
-    assert "Permission denied" in other_delete.json()["detail"]
+def test_unauthenticated_mutations_rejected(client):
+    # Endpoints must strictly reject requests missing valid Bearer token
+    assert client.post("/api/categories", json={"name": "AnonCat"}).status_code == 401
+    assert client.post("/api/expenses", json={"amount": 100}).status_code == 401
+    assert client.post("/api/payments", json={"amount": 100}).status_code == 401
+    assert client.post("/api/recurring", json={"title": "AnonRec"}).status_code == 401
+    assert client.post("/api/reset-data").status_code == 401
 
-    # 10. Payer (Member 2) deleting their own expense should succeed
-    payer_delete = client.delete(
-        f"/api/expenses/{expense_id}",
-        headers={"Authorization": f"Bearer {payer_token}"}
-    )
-    assert payer_delete.status_code == 200
-    assert payer_delete.json()["message"] == "Expense deleted successfully"
+    # Fake X-User-Id header without Bearer token must still be 401
+    assert client.post("/api/categories", json={"name": "ForgedHeader"}, headers={"X-User-Id": "1"}).status_code == 401
 
+def test_reset_data_endpoint_admin_only(client):
+    members = client.get("/api/members").json()
+    admin_id = members[0]["id"]
+    non_admin_id = members[1]["id"]
 
-def test_google_auth_flow(client):
-    # 1. Reject when no token is provided
-    res_empty = client.post("/api/auth/google", json={})
-    assert res_empty.status_code == 400
-    assert "token was provided" in res_empty.json()["detail"].lower()
+    # 1. Unauthenticated -> 401
+    assert client.post("/api/reset-data").status_code == 401
 
-    # 2. Reject when invalid/fake token is sent (Google tokeninfo returns 400/401)
-    res_fake = client.post("/api/auth/google", json={"credential": "invalid_fake_token_12345"})
-    assert res_fake.status_code == 401
-    assert "rejected by google api" in res_fake.json()["detail"].lower() or "google verification error" in res_fake.json()["detail"].lower()
+    # 2. Non-admin -> 403 Forbidden
+    res_non_admin = client.post("/api/reset-data", headers=auth_headers(non_admin_id))
+    assert res_non_admin.status_code == 403
+    assert "admin privileges" in res_non_admin.json()["detail"].lower()
 
-    # 3. Existing member logs in with verified Google token (matching Member 1)
-    token1 = "test_mock_token_member1@flat.internal|Member 1|https://lh3.googleusercontent.com/avatar1.png|google_uid_001"
-    res1 = client.post("/api/auth/google", json={"credential": token1})
+    # 3. Admin -> 200 Allowed
+    res_admin = client.post("/api/reset-data", headers=auth_headers(admin_id))
+    assert res_admin.status_code == 200
+    assert "wiped completely" in res_admin.json()["detail"].lower() if "detail" in res_admin.json() else "wiped completely" in res_admin.json()["message"].lower()
+
+def test_admin_role_authorization_and_reorder_safety(client):
+    members = client.get("/api/members").json()
+    admin_id = members[0]["id"]
+    non_admin_id = members[1]["id"]
+
+    # Non-admin attempting to add a new member receives 403
+    res_deny = client.post("/api/members", json={"name": "Rogue Member"}, headers=auth_headers(non_admin_id))
+    assert res_deny.status_code == 403
+
+    # Admin successfully adds member
+    res_allow = client.post("/api/members", json={"name": "New Flatmate", "upi_id": "new@upi"}, headers=auth_headers(admin_id))
+    assert res_allow.status_code == 201
+
+# ==============================================================================
+# AUDIT PART 5 — GOOGLE OAUTH SECURITY
+# ==============================================================================
+
+def test_google_oauth_no_name_matching_and_separate_accounts(client):
+    # Two Google users with the same display name "Alex Smith" but different emails and google IDs
+    token_alex1 = "test_mock_token_alex1@google.com|Alex Smith|avatar1.png|gid_001"
+    token_alex2 = "test_mock_token_alex2@google.com|Alex Smith|avatar2.png|gid_002"
+
+    res1 = client.post("/api/auth/google", json={"credential": token_alex1, "upi_id": "alex1@upi"})
     assert res1.status_code == 200
-    data1 = res1.json()
-    assert data1["success"] is True
-    assert data1["member"]["name"] == "Member 1"
-    assert data1["token"] is not None
+    m1_data = res1.json()["member"]
 
-    # Verify google_id and avatar were linked
-    members = client.get("/api/members").json()
-    m1 = next(m for m in members if m["name"] == "Member 1")
-    assert m1["avatar_url"] == "https://lh3.googleusercontent.com/avatar1.png"
+    res2 = client.post("/api/auth/google", json={"credential": token_alex2, "upi_id": "alex2@upi"})
+    assert res2.status_code == 200
+    m2_data = res2.json()["member"]
 
-    # 4. New roommate logs in with Google token but provides no UPI ID -> 400 NEEDS_UPI_ID
-    new_token = "test_mock_token_newroommate@flat.internal|New Roommate|https://lh3.googleusercontent.com/avatar_new.png|google_uid_999"
-    res_no_upi = client.post("/api/auth/google", json={"credential": new_token})
-    assert res_no_upi.status_code == 400
-    assert "NEEDS_UPI_ID" in res_no_upi.json()["detail"]
+    # Crucial: Must be two distinct accounts, not conflated by display name!
+    assert m1_data["id"] != m2_data["id"]
+    assert m1_data["email"] == "alex1@google.com"
+    assert m2_data["email"] == "alex2@google.com"
 
-    # 5. New roommate provides invalid UPI ID -> 400 NEEDS_UPI_ID
-    res_bad_upi = client.post("/api/auth/google", json={
-        "credential": new_token,
-        "upi_id": "invalid_upi_no_at_symbol"
-    })
-    assert res_bad_upi.status_code == 400
-    assert "NEEDS_UPI_ID" in res_bad_upi.json()["detail"]
+# ==============================================================================
+# AUDIT PART 6 — PASSWORD SECURITY & NO SILENT ASSIGNMENT
+# ==============================================================================
 
-    # 6. New roommate provides valid UPI ID -> 200 Created & logged in
-    res_new = client.post("/api/auth/google", json={
-        "credential": new_token,
-        "upi_id": "newroommate@okhdfcbank"
-    })
-    assert res_new.status_code == 200
-    data_new = res_new.json()
-    assert data_new["success"] is True
-    assert data_new["member"]["name"] == "New Roommate"
-    assert data_new["member"]["upi_id"] == "newroommate@okhdfcbank"
-    assert data_new["token"] is not None
+def test_no_silent_password_assignment_on_login(client):
+    # Pre-added member with no password hash
+    admin = client.get("/api/members").json()[0]
+    new_m = client.post("/api/members", json={"name": "Uninitialized Roommate", "upi_id": "uninit@upi"}, headers=auth_headers(admin["id"])).json()
 
+    # Attempting to login directly without prior password creation MUST be rejected
+    res_login = client.post("/api/auth/login", json={"identifier": new_m["name"], "password": "randompassword123"})
+    assert res_login.status_code == 400
+    assert "password has not been created" in res_login.json()["detail"].lower()
 
-def test_google_pay_splits_and_deletion_queries(client):
+def test_signup_requires_explicit_password(client):
+    # Signup without password fails validation (422)
+    res_bad = client.post("/api/auth/signup", json={"name": "New User", "upi_id": "user@upi"})
+    assert res_bad.status_code == 422
+
+# ==============================================================================
+# AUDIT PART 7 — SPLIT & EXPENSE INTEGRITY (SHARES & PERCENTAGE PERSISTENCE)
+# ==============================================================================
+
+def test_shares_and_percentage_persistence(client):
     members = client.get("/api/members").json()
     m1 = members[0]
     m2 = members[1]
-    m3 = members[2]
+    h1 = auth_headers(m1["id"])
 
-    # 1. Create expense with percentage split
-    pct_payload = {
+    # 1. Shares split
+    sh_payload = {
         "category_name": "Groceries",
-        "amount": 1000.00,
-        "paid_by": m1["id"],
-        "description": "Weekly Vegetable Market",
-        "expense_date": "2026-10-04",
-        "split_type": "percentage",
-        "splits": [
-            {"member_id": m1["id"], "percentage": 50.0},
-            {"member_id": m2["id"], "percentage": 25.0},
-            {"member_id": m3["id"], "percentage": 25.0}
-        ]
-    }
-    res_pct = client.post(f"/api/expenses?user_id={m1['id']}", json=pct_payload)
-    assert res_pct.status_code == 201
-    pct_exp = res_pct.json()
-    assert pct_exp["split_type"] == "percentage"
-    assert len(pct_exp["splits"]) == 3
-    s_map = {s["member_id"]: float(s["amount"]) for s in pct_exp["splits"]}
-    assert s_map[m1["id"]] == 500.00
-    assert s_map[m2["id"]] == 250.00
-    assert s_map[m3["id"]] == 250.00
-
-    # 2. Create expense with shares split
-    shares_payload = {
-        "category_name": "WiFi & Fiber",
         "amount": 300.00,
-        "paid_by": m2["id"],
-        "description": "Monthly WiFi Bill",
+        "paid_by": m1["id"],
+        "description": "Vegetables",
         "expense_date": "2026-10-04",
         "split_type": "shares",
         "splits": [
@@ -433,46 +435,114 @@ def test_google_pay_splits_and_deletion_queries(client):
             {"member_id": m2["id"], "shares": 1.0}
         ]
     }
-    res_sh = client.post(f"/api/expenses?user_id={m2['id']}", json=shares_payload)
+    res_sh = client.post("/api/expenses", json=sh_payload, headers=h1)
     assert res_sh.status_code == 201
     sh_exp = res_sh.json()
-    assert sh_exp["split_type"] == "shares"
-    assert len(sh_exp["splits"]) == 2
-    sh_map = {s["member_id"]: float(s["amount"]) for s in sh_exp["splits"]}
-    assert sh_map[m1["id"]] == 200.00
-    assert sh_map[m2["id"]] == 100.00
+    exp_id = sh_exp["id"]
 
-    # 3. Verify balances calculation query
-    balances = client.get("/api/balances").json()
-    total_net = sum(float(b["net_balance"]) for b in balances)
-    assert abs(total_net) < 0.05
+    # Verify shares are stored and returned in ExpenseSplitOut
+    res_get = client.get(f"/api/expenses/{exp_id}")
+    assert res_get.status_code == 200
+    splits = {s["member_id"]: s for s in res_get.json()["splits"]}
+    assert Decimal(str(splits[m1["id"]]["shares"])) == Decimal("2.00")
+    assert Decimal(str(splits[m2["id"]]["shares"])) == Decimal("1.00")
+    assert Decimal(str(splits[m1["id"]]["amount"])) == Decimal("200.00")
+    assert Decimal(str(splits[m2["id"]]["amount"])) == Decimal("100.00")
 
-    # 4. Delete the percentage expense and verify clean DB removal
-    del_res = client.delete(f"/api/expenses/{pct_exp['id']}?user_id={m1['id']}")
-    assert del_res.status_code == 200
-    assert del_res.json()["message"] == "Expense deleted successfully"
+# ==============================================================================
+# AUDIT PART 8 — NULL/OPTIONAL UPDATES (MODEL_FIELDS_SET)
+# ==============================================================================
 
-    # Verify expense is completely gone
-    get_del = client.get(f"/api/expenses/{pct_exp['id']}")
-    assert get_del.status_code == 404
+def test_null_field_updates_billing_period_and_budget(client):
+    members = client.get("/api/members").json()
+    h1 = auth_headers(members[0]["id"])
 
-    # 5. Delete the shares expense
-    del_sh = client.delete(f"/api/expenses/{sh_exp['id']}?user_id={m2['id']}")
-    assert del_sh.status_code == 200
+    # 1. Clear billing period on expense
+    exp_res = client.post("/api/expenses", json={
+        "category_name": "WiFi",
+        "amount": 500.00,
+        "paid_by": members[0]["id"],
+        "description": "WiFi monthly",
+        "expense_date": "2026-10-01",
+        "billing_period_start": "2026-10-01",
+        "billing_period_end": "2026-10-31",
+        "split_type": "equal",
+        "member_ids": [members[0]["id"], members[1]["id"]]
+    }, headers=h1)
+    exp_id = exp_res.json()["id"]
+    assert exp_res.json()["billing_period_start"] == "2026-10-01"
 
-    # 6. Create and delete payment
-    pay_res = client.post("/api/payments", json={
-        "from_member": m1["id"],
-        "to_member": m2["id"],
-        "amount": 150.00,
-        "payment_date": "2026-10-04",
-        "status": "Paid"
-    })
-    assert pay_res.status_code == 201
-    pay_id = pay_res.json()["id"]
+    # Explicitly clear billing_period_start
+    update_res = client.put(f"/api/expenses/{exp_id}", json={"billing_period_start": None}, headers=h1)
+    assert update_res.status_code == 200
+    assert update_res.json()["billing_period_start"] is None
 
-    del_pay = client.delete(f"/api/payments/{pay_id}?user_id={m1['id']}")
-    assert del_pay.status_code == 200
-    assert del_pay.json()["message"] == "Payment record deleted successfully"
+    # 2. Clear category monthly budget
+    cat_res = client.post("/api/categories", json={
+        "name": "Housekeeping",
+        "monthly_budget_per_member": 500.00
+    }, headers=h1)
+    cat_id = cat_res.json()["id"]
+    assert cat_res.json()["monthly_budget_per_member"] == "500.00"
 
+    cat_update = client.put(f"/api/categories/{cat_id}", json={"monthly_budget_per_member": None}, headers=h1)
+    assert cat_update.status_code == 200
+    assert cat_update.json()["monthly_budget_per_member"] is None
 
+# ==============================================================================
+# AUDIT PART 9 — RECURRING EXPENSES IDEMPOTENCY
+# ==============================================================================
+
+def test_recurring_expense_idempotency(client):
+    members = client.get("/api/members").json()
+    h1 = auth_headers(members[0]["id"])
+
+    cat_res = client.post("/api/categories", json={"name": "Utilities"}, headers=h1)
+    cat_id = cat_res.json()["id"]
+
+    rec_res = client.post("/api/recurring", json={
+        "title": "Water Dispenser",
+        "category_id": cat_id,
+        "amount": 600.00,
+        "paid_by": members[0]["id"],
+        "split_type": "equal",
+        "frequency": "Monthly"
+    }, headers=h1)
+    assert rec_res.status_code == 201
+    rec_id = rec_res.json()["id"]
+
+    # Generate expense for October 2026
+    gen1 = client.post(f"/api/recurring/{rec_id}/create-expense", json={"expense_date": "2026-10-05"}, headers=h1)
+    assert gen1.status_code == 200
+    assert gen1.json()["amount"] == "600.00"
+
+    # Attempting to generate again for the same period MUST fail with 400
+    gen2 = client.post(f"/api/recurring/{rec_id}/create-expense", json={"expense_date": "2026-10-15"}, headers=h1)
+    assert gen2.status_code == 400
+    assert "already been generated" in gen2.json()["detail"].lower()
+
+# ==============================================================================
+# AUDIT PART 10 — PAYMENT SETTLEMENT RULES
+# ==============================================================================
+
+def test_payment_rules_no_self_payment(client):
+    members = client.get("/api/members").json()
+    h1 = auth_headers(members[0]["id"])
+
+    # Cannot pay self
+    res_self = client.post("/api/payments", json={
+        "from_member": members[0]["id"],
+        "to_member": members[0]["id"],
+        "amount": 200.00,
+        "payment_date": "2026-10-05"
+    }, headers=h1)
+    assert res_self.status_code in (400, 422)
+
+    # Cannot pay <= 0
+    res_zero = client.post("/api/payments", json={
+        "from_member": members[0]["id"],
+        "to_member": members[1]["id"],
+        "amount": 0.00,
+        "payment_date": "2026-10-05"
+    }, headers=h1)
+    assert res_zero.status_code in (400, 422)

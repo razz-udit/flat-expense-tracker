@@ -16,8 +16,15 @@ export default function RecurringPage() {
   const navigate = useNavigate();
   const { members, categories, addToast } = useApp();
 
-  const [recurringList, setRecurringList] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [recurringList, setRecurringList] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('flat_recurring_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState(() => recurringList.length === 0);
 
   // Template Modal (Add / Edit)
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -36,11 +43,14 @@ export default function RecurringPage() {
   const [generateDesc, setGenerateDesc] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const fetchRecurring = useCallback(async () => {
+  const fetchRecurring = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const data = await api.getRecurring();
       setRecurringList(data);
+      try {
+        sessionStorage.setItem('flat_recurring_cache', JSON.stringify(data));
+      } catch (_) {}
     } catch (err) {
       console.error('Failed to load recurring templates:', err);
       addToast('Failed to load recurring expenses', 'error');
@@ -50,7 +60,8 @@ export default function RecurringPage() {
   }, [addToast]);
 
   useEffect(() => {
-    fetchRecurring();
+    const hasCache = recurringList.length > 0;
+    fetchRecurring(hasCache);
   }, [fetchRecurring]);
 
   const handleOpenTemplateModal = (template = null) => {

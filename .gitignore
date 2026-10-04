@@ -35,10 +35,22 @@ yarn-debug.log*
 yarn-error.log*
 client/dist/
 
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
-.env.example
+.env.*
+.env*
+*.env
+*.env.*
+*.env*
+env.example
+*.env.example
+*.env.production.example
+*.example
+
+# Uploaded receipts / screenshots
+uploads/*
+!uploads/.gitkeep
+
 
 # IDE & OS
 .vscode/

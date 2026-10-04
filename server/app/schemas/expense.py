@@ -16,6 +16,8 @@ class ExpenseSplitOut(BaseModel):
     expense_id: int
     member_id: int
     amount: Decimal
+    shares: Optional[Decimal] = None
+    percentage: Optional[Decimal] = None
     member: Optional[MemberOut] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -29,6 +31,9 @@ class ExpenseBase(BaseModel):
     billing_period_start: Optional[date] = None
     billing_period_end: Optional[date] = None
     receipt_url: Optional[str] = None
+    payment_method: Optional[str] = "UPI"
+    verification_status: Optional[str] = "Pending Confirmation"
+    confirmed_by: Optional[str] = None
     split_type: str = Field("equal", pattern="^(equal|custom|exact|percentage|shares)$")
     notes: Optional[str] = None
 
@@ -96,10 +101,17 @@ class ExpenseUpdate(BaseModel):
     billing_period_start: Optional[date] = None
     billing_period_end: Optional[date] = None
     receipt_url: Optional[str] = None
+    payment_method: Optional[str] = None
+    verification_status: Optional[str] = None
+    confirmed_by: Optional[str] = None
     split_type: Optional[str] = Field(None, pattern="^(equal|custom|exact|percentage|shares)$")
     notes: Optional[str] = None
     splits: Optional[List[ExpenseSplitInput]] = None
     member_ids: Optional[List[int]] = None
+
+class ExpenseEvaluationInput(BaseModel):
+    action: str = Field(..., pattern="^(confirm|dispute)$")
+    notes: Optional[str] = None
 
 class ExpenseOut(BaseModel):
     id: int
@@ -108,11 +120,15 @@ class ExpenseOut(BaseModel):
     paid_by: int
     description: str
     expense_date: date
-    billing_period_start: Optional[date]
-    billing_period_end: Optional[date]
-    receipt_url: Optional[str]
+    billing_period_start: Optional[date] = None
+    billing_period_end: Optional[date] = None
+    receipt_url: Optional[str] = None
+    payment_method: Optional[str] = "UPI"
+    verification_status: Optional[str] = "Pending Confirmation"
+    confirmed_by: Optional[str] = None
     split_type: str
-    notes: Optional[str]
+    recurring_id: Optional[int] = None
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     

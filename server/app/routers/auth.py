@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from app.config import settings
 from app.database import get_db
 from app.models.member import Member
 from app.schemas.auth import (
@@ -21,10 +22,11 @@ from app.schemas.auth import (
 )
 from app.schemas.member import MemberOut
 from app.services.auth_service import hash_password, verify_password, create_access_token
+from app.dependencies import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-def find_member_by_identifier(ident: str, db: Session) -> Member:
+def find_member_by_identifier(ident: str, db: Session) -> Optional[Member]:
     clean_ident = ident.strip()
     query = db.query(Member).filter(Member.is_active == True)
 
@@ -45,7 +47,7 @@ def find_member_by_identifier(ident: str, db: Session) -> Member:
 
 def verify_google_token_with_api(credential: Optional[str] = None, access_token: Optional[str] = None) -> dict:
     """
-    Cryptographically verifies Google authentication token using Google's free public OAuth2 API:
+    Cryptographically verifies Google authentication token using Google's public OAuth2 API:
     - ID Token (Google Identity Services): https://oauth2.googleapis.com/tokeninfo?id_token={credential}
     - Access Token: https://www.googleapis.com/oauth2/v3/userinfo
     Returns verified dict with keys: 'email', 'name', 'avatar_url', 'google_id'.
@@ -56,8 +58,13 @@ def verify_google_token_with_api(credential: Optional[str] = None, access_token:
             detail="Google authentication failed: Neither credential ID token nor access token was provided."
         )
 
-    # Allow mock test tokens in test environments (starts with test_mock_token_)
+    # Allow mock test tokens ONLY when explicitly configured in test environment
     if credential and credential.startswith("test_mock_token_"):
+        if settings.APP_ENV != "test":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Test mock credentials are strictly forbidden outside of test environment (APP_ENV=test)."
+            )
         parts = credential.split("test_mock_token_")[1].split("|")
         return {
             "email": parts[0].strip().lower(),
@@ -66,30 +73,32 @@ def verify_google_token_with_api(credential: Optional[str] = None, access_token:
             "google_id": parts[3] if len(parts) > 3 else "test_google_id_123"
         }
 
-    # 1. Verify Google ID token via Google's free tokeninfo endpoint
+    # 1. Verify Google ID token via Google's tokeninfo endpoint
     if credential:
         url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.request.quote(credential)}"
         req = urllib.request.Request(url, headers={"User-Agent": "FlatMatePay/1.0"})
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            err_msg = "Google token verification rejected by Google API."
-            try:
-                err_data = json.loads(e.read().decode("utf-8"))
-                if "error_description" in err_data:
-                    err_msg = f"Google verification error: {err_data['error_description']}"
-            except Exception:
-                pass
+        except urllib.error.HTTPError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=err_msg
+                detail="Google authentication failed: Token was rejected by Google identity service."
             )
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Unable to reach Google OAuth API: {str(e)}"
+                detail="Google authentication service temporarily unreachable. Please try again later."
             )
+
+        # Validate Audience if configured
+        if settings.GOOGLE_CLIENT_ID:
+            aud = data.get("aud")
+            if aud != settings.GOOGLE_CLIENT_ID:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google authentication failed: Token audience mismatch."
+                )
 
         email = data.get("email")
         email_verified = data.get("email_verified")
@@ -106,7 +115,7 @@ def verify_google_token_with_api(credential: Optional[str] = None, access_token:
             "google_id": data.get("sub")
         }
 
-    # 2. Verify Google Access Token via Google's free userinfo endpoint
+    # 2. Verify Google Access Token via Google's userinfo endpoint
     if access_token:
         url = "https://www.googleapis.com/oauth2/v3/userinfo"
         req = urllib.request.Request(
@@ -122,12 +131,12 @@ def verify_google_token_with_api(credential: Optional[str] = None, access_token:
         except urllib.error.HTTPError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google access token rejected by Google API."
+                detail="Google access token rejected by Google identity service."
             )
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Unable to reach Google OAuth API: {str(e)}"
+                detail="Google authentication service temporarily unreachable. Please try again later."
             )
 
         email = data.get("email")
@@ -144,9 +153,11 @@ def verify_google_token_with_api(credential: Optional[str] = None, access_token:
             "google_id": data.get("sub")
         }
 
+    raise HTTPException(status_code=400, detail="Invalid Google token.")
+
 @router.post("/google", response_model=LoginResponse)
 def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
-    # 1. Authenticate cryptographically using Google's free public token verification API
+    # 1. Authenticate cryptographically using Google API
     verified = verify_google_token_with_api(credential=data.credential, access_token=data.access_token)
 
     clean_email = verified["email"]
@@ -155,7 +166,7 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
     google_id = verified["google_id"]
     clean_upi = data.upi_id.strip() if data.upi_id and data.upi_id.strip() else None
 
-    # 2. Search for existing member by google_id, verified email, or name
+    # 2. Search for existing member ONLY by google_id or verified email (NEVER by name)
     member = None
     if google_id:
         member = db.query(Member).filter(Member.google_id == google_id, Member.is_active == True).first()
@@ -163,11 +174,8 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
     if not member and clean_email:
         member = db.query(Member).filter(func.lower(Member.email) == clean_email, Member.is_active == True).first()
 
-    if not member and clean_name:
-        member = db.query(Member).filter(func.lower(Member.name) == clean_name.lower(), Member.is_active == True).first()
-
     if member:
-        # Existing member: Link Google info
+        # Existing member: link google info securely
         if google_id and not member.google_id:
             member.google_id = google_id
         if avatar_url and not member.avatar_url:
@@ -179,10 +187,10 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(member)
 
-        token = create_access_token(member.id)
+        token = create_access_token(member.id, getattr(member, "token_version", 1))
         return LoginResponse(
             success=True,
-            message=f"Welcome back, {member.name}! Authenticated via Google API.",
+            message=f"Welcome back, {member.name}! Authenticated via Google.",
             member=MemberOut.model_validate(member),
             token=token
         )
@@ -194,22 +202,27 @@ def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
             detail="NEEDS_UPI_ID: A valid UPI ID is mandatory for receiving flat settlements (e.g. name@okhdfcbank or 9876543210@paytm)."
         )
 
+    active_count = db.query(Member).filter(Member.is_active == True).count()
+    is_admin = (active_count == 0)
+
     new_member = Member(
         name=clean_name,
         email=clean_email,
         upi_id=clean_upi,
         google_id=google_id,
         avatar_url=avatar_url,
-        is_active=True
+        is_active=True,
+        is_admin=is_admin,
+        token_version=1
     )
     db.add(new_member)
     db.commit()
     db.refresh(new_member)
 
-    token = create_access_token(new_member.id)
+    token = create_access_token(new_member.id, new_member.token_version)
     return LoginResponse(
         success=True,
-        message=f"Welcome to the flat, {new_member.name}! Registered via Google API.",
+        message=f"Welcome to the flat, {new_member.name}! Registered via Google.",
         member=MemberOut.model_validate(new_member),
         token=token
     )
@@ -234,11 +247,13 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
             detail="A valid UPI ID is mandatory for receiving flat settlements (e.g. name@okhdfcbank or 9876543210@paytm)."
         )
 
-    # 1. Check if a member with this exact name or email already exists
+    # Check if a member with this email or name already exists
     query = db.query(Member).filter(Member.is_active == True)
-    existing = query.filter(func.lower(Member.name) == clean_name.lower()).first()
-    if not existing and clean_email:
+    existing = None
+    if clean_email:
         existing = query.filter(func.lower(Member.email) == clean_email.lower()).first()
+    if not existing:
+        existing = query.filter(func.lower(Member.name) == clean_name.lower()).first()
 
     if existing:
         if existing.password_hash:
@@ -246,15 +261,17 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
                 status_code=400, 
                 detail=f"An account for '{existing.name}' already exists. Please go to the Sign In tab."
             )
-        # If the member was added by admin with no password yet, claim and activate it
+        # If the member was pre-added without password, claim and activate it
         existing.name = clean_name
         if clean_email:
             existing.email = clean_email
         if clean_upi:
             existing.upi_id = clean_upi
         existing.password_hash = hash_password(pwd)
+        existing.token_version = getattr(existing, "token_version", 1)
         db.commit()
-        token = create_access_token(existing.id)
+        db.refresh(existing)
+        token = create_access_token(existing.id, existing.token_version)
         return LoginResponse(
             success=True,
             message=f"Welcome to the flat, {existing.name}! Your account has been registered.",
@@ -262,19 +279,23 @@ def signup(data: SignUpRequest, db: Session = Depends(get_db)):
             token=token
         )
 
-    # 2. Create a brand new active Member dynamically
+    active_count = db.query(Member).filter(Member.is_active == True).count()
+    is_admin = (active_count == 0)
+
     new_member = Member(
         name=clean_name,
         email=clean_email or f"{clean_name.lower().replace(' ', '')}@flat.local",
         upi_id=clean_upi,
         password_hash=hash_password(pwd),
-        is_active=True
+        is_active=True,
+        is_admin=is_admin,
+        token_version=1
     )
     db.add(new_member)
     db.commit()
     db.refresh(new_member)
 
-    token = create_access_token(new_member.id)
+    token = create_access_token(new_member.id, new_member.token_version)
     return LoginResponse(
         success=True,
         message=f"Welcome to the flat, {new_member.name}! Your account has been registered.",
@@ -291,30 +312,23 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not member:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No active flat member found with this ID, Name, or Email. If you are new, please use the 'Sign Up' tab to create your account."
+            detail="No active flat member found with this ID, Name, or Email."
         )
 
-    # If the member has never set a password yet, securely set it on their first login
+    # Never silently assign password during login
     if not member.password_hash:
-        member.password_hash = hash_password(pwd)
-        db.commit()
-        token = create_access_token(member.id)
-        return LoginResponse(
-            success=True,
-            message=f"Welcome, {member.name}! Your account password has been set.",
-            member=MemberOut.model_validate(member),
-            token=token
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password has not been created for this account yet. Please use the 'Sign Up' or 'Set Password' tab to set your initial password."
         )
 
-    # If password is already set, verify securely
     if not verify_password(pwd, member.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password. Please try again."
         )
 
-    # Generate session token
-    token = create_access_token(member.id)
+    token = create_access_token(member.id, getattr(member, "token_version", 1))
 
     return LoginResponse(
         success=True,
@@ -329,7 +343,7 @@ def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
     if not member:
         raise HTTPException(
             status_code=404, 
-            detail="Member not found. If you are creating a new account, please use the 'Sign Up' tab."
+            detail="Member not found."
         )
 
     if member.password_hash:
@@ -339,8 +353,10 @@ def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
         )
 
     member.password_hash = hash_password(data.new_password.strip())
+    member.token_version = getattr(member, "token_version", 1) + 1
     db.commit()
-    token = create_access_token(member.id)
+    db.refresh(member)
+    token = create_access_token(member.id, member.token_version)
 
     return LoginResponse(
         success=True,
@@ -350,29 +366,44 @@ def set_password(data: SetPasswordRequest, db: Session = Depends(get_db)):
     )
 
 @router.post("/change-password")
-def change_password(data: ChangePasswordRequest, db: Session = Depends(get_db)):
-    member = db.query(Member).filter(Member.id == data.member_id, Member.is_active == True).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="Member not found")
+def change_password(
+    data: ChangePasswordRequest, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Only the member themselves or flat admin can change this account's password
+    if current_user.id != data.member_id and not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: You can only change your own password."
+        )
 
-    if member.password_hash and not verify_password(data.current_password, member.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    target_member = db.query(Member).filter(Member.id == data.member_id, Member.is_active == True).first()
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Member not found.")
 
-    member.password_hash = hash_password(data.new_password)
+    # If the user is changing their own password, verify current password
+    if current_user.id == target_member.id and target_member.password_hash:
+        if not verify_password(data.current_password, target_member.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+    target_member.password_hash = hash_password(data.new_password.strip())
+    # Invalidate old sessions by incrementing token_version
+    target_member.token_version = getattr(target_member, "token_version", 1) + 1
     db.commit()
 
-    return {"success": True, "message": "Password updated successfully!"}
+    return {"success": True, "message": "Password updated successfully! Old sessions have been invalidated."}
 
 @router.post("/verify-admin")
 def verify_admin(data: VerifyAdminRequest, db: Session = Depends(get_db)):
-    admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
+    admin = db.query(Member).filter(Member.is_admin == True, Member.is_active == True).first()
     if not admin:
-        raise HTTPException(status_code=404, detail="No flat admin found")
+        raise HTTPException(status_code=404, detail="No flat admin configured.")
 
     if not admin.password_hash:
         raise HTTPException(
             status_code=400, 
-            detail=f"Flat Admin ({admin.name}) has not set a password yet. Please ask {admin.name} to sign in and set a password."
+            detail=f"Flat Admin ({admin.name}) has not set a password yet."
         )
 
     if not verify_password(data.admin_password, admin.password_hash):
@@ -381,13 +412,12 @@ def verify_admin(data: VerifyAdminRequest, db: Session = Depends(get_db)):
     return {"success": True, "message": "Flat Admin unlocked successfully!"}
 
 @router.post("/admin-reset-password")
-def admin_reset_password(data: AdminResetPasswordRequest, db: Session = Depends(get_db)):
-    admin = db.query(Member).filter(Member.id == data.admin_member_id, Member.is_active == True).first()
-    first_member = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-    if not admin or not first_member or admin.id != first_member.id:
-        raise HTTPException(status_code=403, detail="Only the Flat Admin can reset member passwords.")
-
-    if admin.password_hash and not verify_password(data.admin_password, admin.password_hash):
+def admin_reset_password(
+    data: AdminResetPasswordRequest, 
+    admin_caller: Member = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    if admin_caller.password_hash and not verify_password(data.admin_password, admin_caller.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect Admin password.")
 
     target = db.query(Member).filter(Member.id == data.target_member_id, Member.is_active == True).first()
@@ -395,6 +425,8 @@ def admin_reset_password(data: AdminResetPasswordRequest, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Target member not found.")
 
     target.password_hash = hash_password(data.new_password.strip())
+    # Invalidate all existing sessions of the target member
+    target.token_version = getattr(target, "token_version", 1) + 1
     db.commit()
 
-    return {"success": True, "message": f"Password for {target.name} has been reset successfully!"}
+    return {"success": True, "message": f"Password for {target.name} has been reset successfully! Old sessions invalidated."}

@@ -10,7 +10,7 @@ class SignUpRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="Full Name of flatmate")
     email: Optional[str] = Field(None, max_length=150, description="Email address")
     upi_id: str = Field(..., min_length=3, max_length=100, description="Mandatory UPI ID for flat settlements (e.g. name@upi)")
-    password: Optional[str] = Field(None, max_length=100)
+    password: str = Field(..., min_length=4, max_length=100)
 
 class GoogleAuthRequest(BaseModel):
     credential: Optional[str] = Field(None, description="Google ID Token JWT from Google Identity Services")

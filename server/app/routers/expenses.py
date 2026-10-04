@@ -1,48 +1,21 @@
+import os
+import uuid
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
+from typing import List, Optional, Tuple
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import extract
 from app.database import get_db
 from app.models.expense import Expense, ExpenseSplit
 from app.models.member import Member
 from app.models.category import Category
-from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseOut
-from app.services.auth_service import verify_access_token
+from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseOut, ExpenseEvaluationInput
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
 
-def get_authenticated_member_id(
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
-    user_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
-) -> int:
-    caller_id = None
-    if authorization and authorization.startswith("Bearer "):
-        token_str = authorization.split("Bearer ", 1)[1].strip()
-        caller_id = verify_access_token(token_str)
-
-    if caller_id is None:
-        caller_id = user_id or x_user_id
-
-    if caller_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required: Please log in to modify or delete flat expenses."
-        )
-
-    member = db.query(Member).filter(Member.id == caller_id, Member.is_active == True).first()
-    if not member:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user session: Member not found or inactive."
-        )
-
-    return member.id
-
-def compute_equal_splits(amount: Decimal, member_ids: List[int]) -> List[tuple[int, Decimal]]:
+def compute_equal_splits(amount: Decimal, member_ids: List[int]) -> List[Tuple[int, Decimal, Optional[Decimal], Optional[Decimal]]]:
     n = len(member_ids)
     if n == 0:
         return []
@@ -53,61 +26,52 @@ def compute_equal_splits(amount: Decimal, member_ids: List[int]) -> List[tuple[i
     result = []
     for idx, mid in enumerate(member_ids):
         cents = base_cents + (1 if idx < remainder_cents else 0)
-        result.append((mid, Decimal(cents) / Decimal(100)))
+        result.append((mid, Decimal(cents) / Decimal(100), None, None))
     return result
 
-def compute_percentage_splits(amount: Decimal, splits_data: list) -> List[tuple[int, Decimal]]:
-    """
-    Computes exact amounts from percentage splits, guaranteeing sum(splits) == amount down to the exact paisa.
-    """
+def compute_percentage_splits(amount: Decimal, splits_data: list) -> List[Tuple[int, Decimal, Optional[Decimal], Optional[Decimal]]]:
     total_cents = int(round(amount * 100))
-    # If amounts are already provided by client and match total
-    if all(getattr(s, "amount", None) is not None for s in splits_data):
-        return [(s.member_id, round(s.amount, 2)) for s in splits_data]
-
-    result = []
     allocated_cents = 0
+    temp_results = []
     for s in splits_data:
         pct = getattr(s, "percentage", None) or Decimal("0.00")
-        cents = int(round(Decimal(total_cents) * (pct / Decimal("100"))))
-        result.append([s.member_id, cents])
+        if getattr(s, "amount", None) is not None:
+            cents = int(round(s.amount * 100))
+        else:
+            cents = int(round(Decimal(total_cents) * (pct / Decimal("100"))))
+        temp_results.append([s.member_id, cents, None, pct])
         allocated_cents += cents
 
     diff = total_cents - allocated_cents
-    if diff != 0 and result:
-        # Allocate any rounding difference (usually +1 or -1 cent) to the member with highest percentage
-        max_idx = max(range(len(splits_data)), key=lambda i: getattr(splits_data[i], "percentage", 0) or 0)
-        result[max_idx][1] += diff
+    if diff != 0 and temp_results:
+        max_idx = max(range(len(temp_results)), key=lambda i: temp_results[i][3] or 0)
+        temp_results[max_idx][1] += diff
 
-    return [(mid, Decimal(cents) / Decimal(100)) for mid, cents in result]
+    return [(mid, Decimal(cents) / Decimal(100), sh, pct) for mid, cents, sh, pct in temp_results]
 
-def compute_shares_splits(amount: Decimal, splits_data: list) -> List[tuple[int, Decimal]]:
-    """
-    Computes exact amounts from shares/ratio splits (e.g. 1 share, 2 shares),
-    guaranteeing sum(splits) == amount down to the exact paisa.
-    """
+def compute_shares_splits(amount: Decimal, splits_data: list) -> List[Tuple[int, Decimal, Optional[Decimal], Optional[Decimal]]]:
     total_cents = int(round(amount * 100))
-    if all(getattr(s, "amount", None) is not None for s in splits_data):
-        return [(s.member_id, round(s.amount, 2)) for s in splits_data]
-
     total_shares = sum((getattr(s, "shares", None) or Decimal("1.00")) for s in splits_data)
     if total_shares <= 0:
         total_shares = Decimal(len(splits_data))
 
-    result = []
     allocated_cents = 0
+    temp_results = []
     for s in splits_data:
         sh = getattr(s, "shares", None) or Decimal("1.00")
-        cents = int(round(Decimal(total_cents) * (sh / total_shares)))
-        result.append([s.member_id, cents])
+        if getattr(s, "amount", None) is not None:
+            cents = int(round(s.amount * 100))
+        else:
+            cents = int(round(Decimal(total_cents) * (sh / total_shares)))
+        temp_results.append([s.member_id, cents, sh, None])
         allocated_cents += cents
 
     diff = total_cents - allocated_cents
-    if diff != 0 and result:
-        max_idx = max(range(len(splits_data)), key=lambda i: getattr(splits_data[i], "shares", 0) or 0)
-        result[max_idx][1] += diff
+    if diff != 0 and temp_results:
+        max_idx = max(range(len(temp_results)), key=lambda i: temp_results[i][2] or 0)
+        temp_results[max_idx][1] += diff
 
-    return [(mid, Decimal(cents) / Decimal(100)) for mid, cents in result]
+    return [(mid, Decimal(cents) / Decimal(100), sh, pct) for mid, cents, sh, pct in temp_results]
 
 @router.get("", response_model=List[ExpenseOut])
 def get_expenses(
@@ -119,6 +83,8 @@ def get_expenses(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     search: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    verification_status: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
@@ -133,6 +99,10 @@ def get_expenses(
         query = query.filter(Expense.category_id == category_id)
     if paid_by:
         query = query.filter(Expense.paid_by == paid_by)
+    if payment_method:
+        query = query.filter(Expense.payment_method == payment_method)
+    if verification_status:
+        query = query.filter(Expense.verification_status == verification_status)
     if year:
         query = query.filter(extract('year', Expense.expense_date) == year)
     if month:
@@ -151,32 +121,19 @@ def get_expenses(
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
 def create_expense(
     data: ExpenseCreate, 
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[int] = Header(None, alias="X-User-Id"),
-    user_id: Optional[int] = Query(None),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    caller_id = None
-    if authorization and authorization.startswith("Bearer "):
-        token_str = authorization.split("Bearer ", 1)[1].strip()
-        caller_id = verify_access_token(token_str)
-    if caller_id is None:
-        caller_id = user_id or x_user_id
+    # Only the payer themselves or flat admin can record an expense paid by them
+    if current_user.id != data.paid_by and not getattr(current_user, "is_admin", False):
+        target_member = db.query(Member).filter(Member.id == data.paid_by).first()
+        target_name = target_member.name if target_member else f"Member {data.paid_by}"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: You are logged in as {current_user.name}. You cannot record an expense paid by {target_name}."
+        )
 
-    if caller_id is not None and data.paid_by != caller_id:
-        first_admin = db.query(Member).filter(Member.is_active == True).order_by(Member.id).first()
-        admin_id = first_admin.id if first_admin else None
-        if caller_id != admin_id:
-            caller_member = db.query(Member).filter(Member.id == caller_id).first()
-            target_member = db.query(Member).filter(Member.id == data.paid_by).first()
-            caller_name = caller_member.name if caller_member else f"Member {caller_id}"
-            target_name = target_member.name if target_member else f"Member {data.paid_by}"
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: You are logged in as {caller_name}. You cannot record an expense paid by {target_name}. Only {target_name} or the flat admin can record expenses they paid."
-            )
-
-    # Validate category and payer
+    # Validate category
     category = None
     if data.category_id:
         category = db.query(Category).filter(Category.id == data.category_id).first()
@@ -197,7 +154,7 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Payer member not found")
 
     # Determine splits
-    split_records: List[tuple[int, Decimal]] = []
+    split_records: List[Tuple[int, Decimal, Optional[Decimal], Optional[Decimal]]] = []
     if data.split_type == "equal":
         member_ids = data.member_ids or ([s.member_id for s in data.splits] if data.splits else [])
         if not member_ids:
@@ -243,9 +200,9 @@ def create_expense(
         for s in data.splits:
             if s.member_id not in existing_ids:
                 raise HTTPException(status_code=400, detail=f"Member ID {s.member_id} does not exist")
-            split_records.append((s.member_id, round(s.amount, 2)))
+            split_records.append((s.member_id, round(s.amount, 2), s.shares, s.percentage))
 
-    # Category description validation:
+    # Description validation
     GENERAL_CATEGORY_KEYWORDS = ["grocery", "groceries", "general", "supplies", "provisions", "other", "misc", "food", "market", "vegetable", "items"]
     cat_name_lower = (category.name or "").lower().strip()
     is_general = any(k in cat_name_lower for k in GENERAL_CATEGORY_KEYWORDS)
@@ -268,17 +225,22 @@ def create_expense(
         billing_period_start=data.billing_period_start,
         billing_period_end=data.billing_period_end,
         receipt_url=data.receipt_url.strip() if data.receipt_url else None,
+        payment_method=(data.payment_method or "UPI").strip(),
+        verification_status=(data.verification_status or "Pending Confirmation").strip(),
+        confirmed_by=data.confirmed_by or "",
         split_type=data.split_type,
         notes=data.notes.strip() if data.notes else None
     )
     db.add(expense)
     db.flush()
 
-    for mid, amt in split_records:
+    for mid, amt, sh, pct in split_records:
         split = ExpenseSplit(
             expense_id=expense.id,
             member_id=mid,
-            amount=amt
+            amount=amt,
+            shares=sh,
+            percentage=pct
         )
         db.add(split)
 
@@ -301,7 +263,7 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)):
 def update_expense(
     expense_id: int, 
     data: ExpenseUpdate, 
-    caller_id: int = Depends(get_authenticated_member_id),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     expense = db.query(Expense).options(
@@ -310,17 +272,17 @@ def update_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    if caller_id != expense.paid_by:
+    if current_user.id != expense.paid_by and not getattr(current_user, "is_admin", False):
         payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: You cannot edit this expense because it was paid by {payer_name}. Only {payer_name} can edit this expense."
+            detail=f"Permission denied: You cannot edit this expense because it was paid by {payer_name}."
         )
 
-    if data.paid_by is not None and data.paid_by != expense.paid_by:
+    if data.paid_by is not None and data.paid_by != expense.paid_by and not getattr(current_user, "is_admin", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Permission denied: You cannot change the payer of an expense to another member."
+            detail="Permission denied: You cannot change the payer of an expense."
         )
 
     new_amount = round(data.amount, 2) if data.amount is not None else expense.amount
@@ -347,25 +309,33 @@ def update_expense(
             raise HTTPException(status_code=400, detail="Payer not found")
         expense.paid_by = data.paid_by
 
-    if data.description is not None:
+    if "description" in data.model_fields_set and data.description is not None:
         expense.description = data.description.strip()
-    if data.expense_date is not None:
+    if "expense_date" in data.model_fields_set and data.expense_date is not None:
         expense.expense_date = data.expense_date
-    if data.billing_period_start is not None:
+    if "payment_method" in data.model_fields_set and data.payment_method is not None:
+        expense.payment_method = data.payment_method.strip()
+    if "verification_status" in data.model_fields_set and data.verification_status is not None:
+        expense.verification_status = data.verification_status.strip()
+    if "confirmed_by" in data.model_fields_set and data.confirmed_by is not None:
+        expense.confirmed_by = data.confirmed_by
+
+    # Correct handling of optional/clearable fields via model_fields_set
+    if "billing_period_start" in data.model_fields_set:
         expense.billing_period_start = data.billing_period_start
-    if data.billing_period_end is not None:
+    if "billing_period_end" in data.model_fields_set:
         expense.billing_period_end = data.billing_period_end
-    if data.receipt_url is not None:
+    if "receipt_url" in data.model_fields_set:
         expense.receipt_url = data.receipt_url.strip() if data.receipt_url else None
-    if data.notes is not None:
+    if "notes" in data.model_fields_set:
         expense.notes = data.notes.strip() if data.notes else None
 
     expense.amount = new_amount
     expense.split_type = new_split_type
 
-    # If splits or member_ids or amount changed
+    # Recompute splits if splits, member_ids, or amount changed
     if data.splits is not None or data.member_ids is not None or data.amount is not None:
-        split_records: List[tuple[int, Decimal]] = []
+        split_records: List[Tuple[int, Decimal, Optional[Decimal], Optional[Decimal]]] = []
         if new_split_type == "equal":
             if data.member_ids:
                 member_ids = data.member_ids
@@ -399,12 +369,12 @@ def update_expense(
                     detail=f"Sum of splits (₹{total_split:.2f}) must equal expense amount (₹{new_amount:.2f})"
                 )
             for s in splits_input:
-                split_records.append((s.member_id, round(s.amount, 2)))
+                split_records.append((s.member_id, round(s.amount, 2), s.shares, s.percentage))
 
-        # Remove old splits and replace
+        # Replace existing splits
         db.query(ExpenseSplit).filter(ExpenseSplit.expense_id == expense_id).delete()
-        for mid, amt in split_records:
-            db.add(ExpenseSplit(expense_id=expense_id, member_id=mid, amount=amt))
+        for mid, amt, sh, pct in split_records:
+            db.add(ExpenseSplit(expense_id=expense_id, member_id=mid, amount=amt, shares=sh, percentage=pct))
 
     db.commit()
     db.refresh(expense)
@@ -413,7 +383,7 @@ def update_expense(
 @router.delete("/{expense_id}")
 def delete_expense(
     expense_id: int, 
-    caller_id: int = Depends(get_authenticated_member_id),
+    current_user: Member = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     expense = db.query(Expense).options(
@@ -422,15 +392,66 @@ def delete_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    if caller_id != expense.paid_by:
+    if current_user.id != expense.paid_by and not getattr(current_user, "is_admin", False):
         payer_name = expense.payer.name if expense.payer else f"Member {expense.paid_by}"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: You cannot delete this expense because it was paid by {payer_name}. Only {payer_name} can delete this expense."
+            detail=f"Permission denied: You cannot delete this expense because it was paid by {payer_name}."
         )
 
-    # Explicitly delete all splits first, then delete expense
     db.query(ExpenseSplit).filter(ExpenseSplit.expense_id == expense_id).delete()
     db.delete(expense)
     db.commit()
     return {"message": "Expense deleted successfully"}
+
+@router.post("/{expense_id}/evaluate", response_model=ExpenseOut)
+def evaluate_expense(
+    expense_id: int,
+    data: ExpenseEvaluationInput,
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).options(
+        joinedload(Expense.category),
+        joinedload(Expense.payer),
+        joinedload(Expense.splits).joinedload(ExpenseSplit.member)
+    ).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    if data.action == "confirm":
+        current_confirmed = [int(x.strip()) for x in (expense.confirmed_by or "").split(",") if x.strip().isdigit()]
+        if current_user.id not in current_confirmed:
+            current_confirmed.append(current_user.id)
+        expense.confirmed_by = ",".join(map(str, current_confirmed))
+        expense.verification_status = "Confirmed"
+    elif data.action == "dispute":
+        expense.verification_status = "Disputed / Flagged"
+        note_entry = f"[Disputed by {current_user.name}: {data.notes or 'Suspected false expense'}]"
+        expense.notes = f"{expense.notes}\n{note_entry}".strip() if expense.notes else note_entry
+
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+@router.post("/upload-receipt")
+async def upload_receipt(
+    file: UploadFile = File(...),
+    current_user: Member = Depends(get_current_user)
+):
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"]
+    if file.content_type and file.content_type not in allowed_types and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image screenshot (JPEG, PNG, WEBP).")
+
+    uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1] or ".png"
+    unique_name = f"receipt_{uuid.uuid4().hex[:12]}{ext}"
+    file_path = os.path.join(uploads_dir, unique_name)
+
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    return {"receipt_url": f"/uploads/{unique_name}"}

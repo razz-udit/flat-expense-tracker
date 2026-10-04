@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock, Equal, Percent, Hash } from 'lucide-react';
+import { X, AlertCircle, Check, Users, Receipt, CalendarRange, Lock, Equal, Percent, Hash, Upload, Image, Banknote, QrCode, Sparkles } from 'lucide-react';
 
 export default function AddExpenseModal({ onExpenseSaved }) {
   const {
@@ -26,6 +26,11 @@ export default function AddExpenseModal({ onExpenseSaved }) {
   const [hasBillingPeriod, setHasBillingPeriod] = useState(false);
   const [billingStart, setBillingStart] = useState('');
   const [billingEnd, setBillingEnd] = useState('');
+
+  // Payment Method & Proof
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI' | 'Cash'
+  const [receiptUrl, setReceiptUrl] = useState('');
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
   
   // Split Modes: 'equal' | 'exact' | 'percentage' | 'shares'
   const [splitType, setSplitType] = useState('equal');
@@ -33,6 +38,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
   const [customSplits, setCustomSplits] = useState({}); // { [memberId]: string_amount }
   const [percentageSplits, setPercentageSplits] = useState({}); // { [memberId]: string_percent }
   const [sharesSplits, setSharesSplits] = useState({}); // { [memberId]: string_shares }
+  const [autoBalanceExact, setAutoBalanceExact] = useState(true);
   const [notes, setNotes] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +62,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       setExpenseDate(editingExpense.expense_date || todayStr);
       setDescription(editingExpense.description || '');
       setNotes(editingExpense.notes || '');
+      setPaymentMethod(editingExpense.payment_method || 'UPI');
+      setReceiptUrl(editingExpense.receipt_url || '');
 
       if (editingExpense.billing_period_start || editingExpense.billing_period_end) {
         setHasBillingPeriod(true);
@@ -82,8 +90,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       (editingExpense.splits || []).forEach((s) => {
         const sAmt = parseFloat(s.amount) || 0;
         customMap[s.member_id] = s.amount?.toString() || '';
-        pctMap[s.member_id] = ((sAmt / totalExpAmt) * 100).toFixed(1);
-        sharesMap[s.member_id] = '1';
+        pctMap[s.member_id] = s.percentage != null ? parseFloat(s.percentage).toFixed(1) : ((sAmt / totalExpAmt) * 100).toFixed(1);
+        sharesMap[s.member_id] = s.shares != null ? parseFloat(s.shares).toString() : '1';
       });
 
       setCustomSplits(customMap);
@@ -104,6 +112,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       setExpenseDate(todayStr);
       setDescription('');
       setNotes('');
+      setPaymentMethod('UPI');
+      setReceiptUrl('');
       setHasBillingPeriod(false);
       setBillingStart('');
       setBillingEnd('');
@@ -229,18 +239,124 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     setSharesSplits(newShares);
   };
 
+  const handleExactSplitChange = (targetMid, valueStr) => {
+    if (!autoBalanceExact || selectedMemberIds.length <= 1 || parsedAmount <= 0) {
+      setCustomSplits((prev) => ({ ...prev, [targetMid]: valueStr }));
+      return;
+    }
+
+    const val = parseFloat(valueStr);
+    if (isNaN(val)) {
+      setCustomSplits((prev) => ({ ...prev, [targetMid]: valueStr }));
+      return;
+    }
+
+    const clampedVal = Math.max(0, Math.min(parsedAmount, val));
+    const remaining = Math.max(0, parsedAmount - clampedVal);
+    const otherMids = selectedMemberIds.filter((id) => id !== targetMid);
+
+    if (otherMids.length === 0) {
+      setCustomSplits({ [targetMid]: valueStr });
+      return;
+    }
+
+    const otherShare = (remaining / otherMids.length).toFixed(2);
+    let running = 0;
+    const nextSplits = { ...customSplits, [targetMid]: valueStr };
+
+    otherMids.forEach((mid, idx) => {
+      if (idx === otherMids.length - 1) {
+        nextSplits[mid] = (remaining - running).toFixed(2);
+      } else {
+        nextSplits[mid] = otherShare;
+        running += parseFloat(otherShare);
+      }
+    });
+
+    setCustomSplits(nextSplits);
+  };
+
+  const handlePercentageSplitChange = (targetMid, valueStr) => {
+    if (!autoBalanceExact || selectedMemberIds.length <= 1) {
+      setPercentageSplits((prev) => ({ ...prev, [targetMid]: valueStr }));
+      return;
+    }
+
+    const pct = parseFloat(valueStr);
+    if (isNaN(pct)) {
+      setPercentageSplits((prev) => ({ ...prev, [targetMid]: valueStr }));
+      return;
+    }
+
+    const clampedPct = Math.max(0, Math.min(100, pct));
+    const remaining = Math.max(0, 100 - clampedPct);
+    const otherMids = selectedMemberIds.filter((id) => id !== targetMid);
+
+    if (otherMids.length === 0) {
+      setPercentageSplits({ [targetMid]: valueStr });
+      return;
+    }
+
+    const otherShare = parseFloat((remaining / otherMids.length).toFixed(1));
+    let running = 0;
+    const nextPcts = { ...percentageSplits, [targetMid]: valueStr };
+
+    otherMids.forEach((mid, idx) => {
+      if (idx === otherMids.length - 1) {
+        nextPcts[mid] = (remaining - running).toFixed(1);
+      } else {
+        nextPcts[mid] = otherShare.toFixed(1);
+        running += otherShare;
+      }
+    });
+
+    setPercentageSplits(nextPcts);
+  };
+
+  const handleScreenshotChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      addToast('Please upload an image screenshot (PNG, JPG, WEBP)', 'error');
+      return;
+    }
+
+    try {
+      setIsUploadingReceipt(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result;
+        setReceiptUrl(base64Data);
+
+        try {
+          const res = await api.uploadReceipt(file);
+          if (res?.receipt_url) {
+            setReceiptUrl(res.receipt_url);
+          }
+        } catch (uploadErr) {
+          console.warn('Backend upload fell back to embedded screenshot:', uploadErr);
+        } finally {
+          setIsUploadingReceipt(false);
+          addToast('Payment screenshot attached!', 'success');
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error attaching screenshot:', err);
+      setIsUploadingReceipt(false);
+      addToast('Failed to process image file', 'error');
+    }
+  };
+
+  const handleRemoveReceipt = () => {
+    setReceiptUrl('');
+  };
+
   const selectedCategory = categories.find((c) => c.id.toString() === categoryId?.toString());
   const currentCategoryName = (isCreatingNewCategory || categories.length === 0)
     ? customCategoryInput.trim()
     : (selectedCategory?.name || '');
-
-  const isGeneralCategory = (catName) => {
-    if (!catName) return false;
-    const name = catName.toLowerCase().trim();
-    const generalKeywords = ['grocery', 'groceries', 'general', 'supplies', 'provisions', 'other', 'misc', 'food', 'market', 'vegetable', 'items'];
-    return generalKeywords.some((k) => name.includes(k));
-  };
-  const isDescriptionMandatory = isGeneralCategory(currentCategoryName);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -257,7 +373,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
     if (isCreatingNewCategory || categories.length === 0) {
       const trimmedCat = customCategoryInput.trim();
       if (!trimmedCat) {
-        setValidationError('Please enter a category name (e.g. Grocery, WiFi, Snacks, Milk).');
+        setValidationError('Please enter a category name.');
         return;
       }
       const existing = categories.find((c) => c.name.toLowerCase() === trimmedCat.toLowerCase());
@@ -276,13 +392,6 @@ export default function AddExpenseModal({ onExpenseSaved }) {
 
     const displayCategoryName = currentCategoryName || 'Shared Expense';
     const trimmedDesc = description.trim();
-    if (isDescriptionMandatory && !trimmedDesc) {
-      setValidationError(
-        `Description is mandatory for "${displayCategoryName}". Please specify what was purchased (e.g. Milk, Vegetables, Cooking Oil).`
-      );
-      return;
-    }
-
     const finalDescription = trimmedDesc || displayCategoryName;
 
     if (selectedMemberIds.length === 0) {
@@ -310,7 +419,6 @@ export default function AddExpenseModal({ onExpenseSaved }) {
         );
         return;
       }
-      // Compute accurate rupee amounts with cents distribution
       const totalCents = Math.round(parsedAmount * 100);
       let sumAllocated = 0;
       const rawSplits = selectedMemberIds.map((mid) => {
@@ -357,6 +465,8 @@ export default function AddExpenseModal({ onExpenseSaved }) {
       category_name: finalCategoryName,
       amount: parsedAmount,
       paid_by: parseInt(paidBy, 10),
+      payment_method: paymentMethod,
+      receipt_url: receiptUrl.trim() || null,
       description: finalDescription,
       expense_date: expenseDate,
       billing_period_start: hasBillingPeriod && billingStart ? billingStart : null,
@@ -428,7 +538,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                   step="0.01"
                   min="0.01"
                   required
-                  placeholder="2400.00"
+                  placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-bold text-slate-900 text-sm tabular-nums"
@@ -461,7 +571,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. WiFi, Grocery, Maid, Milk"
+                  placeholder="Category name"
                   value={customCategoryInput}
                   onChange={(e) => setCustomCategoryInput(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 font-semibold text-slate-900 placeholder:text-slate-400"
@@ -515,17 +625,105 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             </div>
           </div>
 
+          {/* Payment Method Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Payment Method *
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('UPI')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  paymentMethod === 'UPI'
+                    ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Online / UPI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('Cash')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  paymentMethod === 'Cash'
+                    ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <Banknote className="w-3.5 h-3.5" />
+                <span>Paid by Cash</span>
+              </button>
+            </div>
+
+            {paymentMethod === 'Cash' && (
+              <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Cash Confirmation:</strong> Roommates will be asked to confirm receipt of this cash payment in the ledger to prevent false claims.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Screenshot / Receipt Proof */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Payment Proof / Screenshot <span className="text-slate-400 font-normal lowercase">(optional)</span>
+              </label>
+              {receiptUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveReceipt}
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
+                >
+                  Remove screenshot
+                </button>
+              )}
+            </div>
+
+            {receiptUrl ? (
+              <div className="relative p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 flex items-center gap-3">
+                <img
+                  src={receiptUrl}
+                  alt="Receipt Preview"
+                  className="w-14 h-14 rounded-lg object-cover border border-slate-200 bg-white"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Payment Screenshot Attached</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    Roommates can view this proof in the expense ledger.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2.5 p-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-white text-slate-600 cursor-pointer transition-colors">
+                <Upload className="w-4 h-4 text-slate-400" />
+                <span className="text-xs font-semibold">
+                  {isUploadingReceipt ? 'Attaching screenshot...' : 'Upload Payment Screenshot or Receipt (PNG, JPG)'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScreenshotChange}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
           {/* Description */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
               <span>
-                Description {isDescriptionMandatory ? (
-                  <span className="text-rose-500 font-bold">*</span>
-                ) : (
-                  <span className="text-slate-400 font-normal lowercase">(optional for {currentCategoryName || 'this item'})</span>
-                )}
+                Description <span className="text-slate-400 font-normal lowercase">(optional)</span>
               </span>
-              {!isDescriptionMandatory && !description.trim() && (
+              {!description.trim() && (
                 <span className="text-[11px] text-slate-500 font-medium lowercase">
                   defaults to "{currentCategoryName || 'Category'}"
                 </span>
@@ -533,15 +731,10 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             </label>
             <input
               type="text"
-              required={isDescriptionMandatory}
-              placeholder={
-                isDescriptionMandatory
-                  ? `e.g. Vegetables, Milk, Cooking Oil (mandatory for ${currentCategoryName || 'Grocery'})`
-                  : `e.g. ${currentCategoryName || 'Details'} (optional - leave blank to use category name)`
-              }
+              placeholder="What was this expense for?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium text-slate-900"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200/90 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium text-slate-900 placeholder:text-slate-400"
             />
           </div>
 
@@ -553,7 +746,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
               className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               <CalendarRange className="w-3.5 h-3.5 text-slate-500" />
-              <span>{hasBillingPeriod ? 'Remove Billing Period' : '+ Add Multi-Month Billing Period (e.g. Electricity)'}</span>
+              <span>{hasBillingPeriod ? 'Remove Billing Period' : '+ Add Multi-Month Billing Period'}</span>
             </button>
 
             {hasBillingPeriod && (
@@ -707,8 +900,20 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             {/* Split Mode Content 2: Exact Amounts (₹) */}
             {splitType === 'exact' && (
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-3">
-                <div className="flex items-center justify-between text-xs font-bold mb-1">
-                  <span className="text-slate-700">Enter exact amount per person</span>
+                <div className="flex items-center justify-between text-xs font-bold mb-1 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-700">Enter exact amount (₹)</span>
+                    <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoBalanceExact}
+                        onChange={(e) => setAutoBalanceExact(e.target.checked)}
+                        className="rounded accent-emerald-600 w-3 h-3 cursor-pointer"
+                      />
+                      <Sparkles className="w-3 h-3 text-emerald-600" />
+                      <span>Auto-balance others</span>
+                    </label>
+                  </div>
                   <button
                     type="button"
                     onClick={handleDistributeEvenlyExact}
@@ -734,7 +939,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             min="0"
                             placeholder="0.00"
                             value={customSplits[mid] || ''}
-                            onChange={(e) => setCustomSplits({ ...customSplits, [mid]: e.target.value })}
+                            onChange={(e) => handleExactSplitChange(mid, e.target.value)}
                             className="w-full pl-6 pr-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 text-right bg-white"
                           />
                         </div>
@@ -762,8 +967,20 @@ export default function AddExpenseModal({ onExpenseSaved }) {
             {/* Split Mode Content 3: By Percentage (%) */}
             {splitType === 'percentage' && (
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-3">
-                <div className="flex items-center justify-between text-xs font-bold mb-1">
-                  <span className="text-slate-700">Enter percentage per person (%)</span>
+                <div className="flex items-center justify-between text-xs font-bold mb-1 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-700">Enter percentage per person (%)</span>
+                    <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoBalanceExact}
+                        onChange={(e) => setAutoBalanceExact(e.target.checked)}
+                        className="rounded accent-emerald-600 w-3 h-3 cursor-pointer"
+                      />
+                      <Sparkles className="w-3 h-3 text-emerald-600" />
+                      <span>Auto-balance others</span>
+                    </label>
+                  </div>
                   <button
                     type="button"
                     onClick={handleDistributePercentages}
@@ -796,7 +1013,7 @@ export default function AddExpenseModal({ onExpenseSaved }) {
                             max="100"
                             placeholder="0"
                             value={percentageSplits[mid] || ''}
-                            onChange={(e) => setPercentageSplits({ ...percentageSplits, [mid]: e.target.value })}
+                            onChange={(e) => handlePercentageSplitChange(mid, e.target.value)}
                             className="w-full pr-6 pl-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 text-right bg-white"
                           />
                           <span className="absolute right-2 top-1 text-xs text-slate-400 font-bold">%</span>

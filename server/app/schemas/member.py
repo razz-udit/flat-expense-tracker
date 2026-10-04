@@ -15,10 +15,12 @@ class MemberUpdate(BaseModel):
     email: Optional[str] = Field(None, max_length=150)
     upi_id: Optional[str] = Field(None, max_length=100)
     is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
 
 class MemberOut(MemberBase):
     id: int
     is_active: bool
+    is_admin: bool = False
     avatar_url: Optional[str] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)

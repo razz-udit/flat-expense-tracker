@@ -4,13 +4,38 @@ import { api } from '../services/api';
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const [members, setMembers] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [members, setMembers] = useState(() => {
+    try {
+      const cached = localStorage.getItem('flat_cached_members');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = localStorage.getItem('flat_cached_categories');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [activeMemberId, setActiveMemberId] = useState(() => {
     const saved = localStorage.getItem('flat_current_user_id') || localStorage.getItem('flat_active_member_id');
     return saved ? parseInt(saved, 10) : null;
   });
-  const [isLoadingMeta, setIsLoadingMeta] = useState(true);
+
+  // Only show full-page bootstrap loading on first visit when no cached metadata exists
+  const [isLoadingMeta, setIsLoadingMeta] = useState(() => {
+    try {
+      const cached = localStorage.getItem('flat_cached_members');
+      return !(cached && JSON.parse(cached).length > 0);
+    } catch {
+      return true;
+    }
+  });
 
   // Global modals
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -43,15 +68,24 @@ export function AppProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const refreshMeta = useCallback(async () => {
-    try {
+  const refreshMeta = useCallback(async (options = {}) => {
+    const shouldShowLoader = options.forceLoading;
+    if (shouldShowLoader) {
       setIsLoadingMeta(true);
+    }
+
+    try {
       const [membersData, categoriesData] = await Promise.all([
         api.getMembers(),
         api.getCategories()
       ]);
       setMembers(membersData);
       setCategories(categoriesData);
+
+      try {
+        localStorage.setItem('flat_cached_members', JSON.stringify(membersData));
+        localStorage.setItem('flat_cached_categories', JSON.stringify(categoriesData));
+      } catch (_) {}
 
       // Verify that activeMemberId still exists in membersData
       const savedId = localStorage.getItem('flat_current_user_id') || localStorage.getItem('flat_active_member_id');
@@ -280,7 +314,9 @@ export function AppProvider({ children }) {
     };
   }, [addToast]);
 
-  const currentUser = members.find((m) => m.id === activeMemberId) || null;
+  const currentUser = React.useMemo(() => {
+    return members.find((m) => m.id === activeMemberId) || null;
+  }, [members, activeMemberId]);
 
   return (
     <AppContext.Provider

@@ -22,6 +22,7 @@ from app.schemas.category import (
 from app.schemas.payment import PaymentOut
 from app.routers.payments import attach_upi_link
 from app.services.upi_service import generate_upi_link
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/categories", tags=["Categories"])
 
@@ -33,7 +34,11 @@ def get_categories(include_inactive: bool = False, db: Session = Depends(get_db)
     return query.order_by(Category.name).all()
 
 @router.post("", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
-def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    data: CategoryCreate, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     clean_name = data.name.strip()
     existing = db.query(Category).filter(Category.name.ilike(clean_name)).first()
     if existing:
@@ -98,8 +103,6 @@ def get_categories_budget_status(
         total_budget = (target_per_member * members_count) if (target_per_member and members_count > 0) else None
 
         member_contribs = []
-        debtors = []
-        creditors = []
 
         # Benchmark for Member Contribution Diff vs Target
         budget_benchmark = target_per_member if target_per_member is not None else (
@@ -120,18 +123,13 @@ def get_categories_budget_status(
             ))
 
         # Benchmark for Equalization Transfers:
-        # If target budget is set AND some members are below budget while others are above,
-        # benchmark against target budget (e.g. 1500).
-        # If all members are over budget (or all under budget), equalize against average actual spend.
         has_under = target_per_member is not None and any(cat_member_paid.get((cat.id, m.id), Decimal("0.00")) < (target_per_member - Decimal("0.01")) for m in active_members)
         has_over = target_per_member is not None and any(cat_member_paid.get((cat.id, m.id), Decimal("0.00")) > (target_per_member + Decimal("0.01")) for m in active_members)
 
         if target_per_member is not None and has_under and has_over:
             eq_benchmark = target_per_member
-            reason_suffix = f"to equalize {cat.name} budget"
         else:
             eq_benchmark = round(total_spent / members_count, 2) if members_count > 0 else Decimal("0.00")
-            reason_suffix = f"to equalize {cat.name} spending"
 
         debtors = []
         creditors = []
@@ -152,7 +150,6 @@ def get_categories_budget_status(
                     "surplus": eq_diff
                 })
 
-        # Calculate equalization transfers
         equalization_transfers = []
         debtors.sort(key=lambda x: x["deficit"], reverse=True)
         creditors.sort(key=lambda x: x["surplus"], reverse=True)
@@ -205,7 +202,16 @@ def get_categories_budget_status(
     return results
 
 @router.post("/equalize-budget", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
-def equalize_budget(data: EqualizeBudgetRequest, db: Session = Depends(get_db)):
+def equalize_budget(
+    data: EqualizeBudgetRequest, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if data.from_member_id == data.to_member_id:
+        raise HTTPException(status_code=400, detail="Payer and receiver cannot be the same member.")
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0.")
+
     cat = db.query(Category).filter(Category.id == data.category_id).first()
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -214,6 +220,13 @@ def equalize_budget(data: EqualizeBudgetRequest, db: Session = Depends(get_db)):
     receiver = db.query(Member).filter(Member.id == data.to_member_id).first()
     if not payer or not receiver:
         raise HTTPException(status_code=400, detail="Invalid payer or receiver")
+
+    is_admin = getattr(current_user, "is_admin", False)
+    if current_user.id != data.from_member_id and current_user.id != data.to_member_id and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: You cannot initiate an equalization payment for other members."
+        )
 
     today = date.today()
     note = data.notes or f"Budget Equalization for {cat.name}: {payer.name} to {receiver.name}"
@@ -235,7 +248,12 @@ def equalize_budget(data: EqualizeBudgetRequest, db: Session = Depends(get_db)):
     return attach_upi_link(payment)
 
 @router.put("/{category_id}", response_model=CategoryOut)
-def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db)):
+def update_category(
+    category_id: int, 
+    data: CategoryUpdate, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -249,11 +267,11 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
             raise HTTPException(status_code=400, detail=f"Category '{name_clean}' already exists")
         category.name = name_clean
 
-    if data.description is not None:
+    if "description" in data.model_fields_set:
         category.description = data.description.strip() if data.description else None
-    if data.monthly_budget_per_member is not None:
+    if "monthly_budget_per_member" in data.model_fields_set:
         category.monthly_budget_per_member = data.monthly_budget_per_member
-    if data.is_active is not None:
+    if "is_active" in data.model_fields_set and data.is_active is not None:
         category.is_active = data.is_active
 
     db.commit()
@@ -261,7 +279,11 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
     return category
 
 @router.delete("/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(
+    category_id: int, 
+    current_user: Member = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")

@@ -309,12 +309,43 @@ def get_monthly_summary(year: int, month: int, db: Session = Depends(get_db)):
         expenses=[ExpenseOut.model_validate(e) for e in expenses_query]
     )
 
+import os
+
+from app.dependencies import require_admin
+
 @router.post("/reset-data")
-def reset_all_data(db: Session = Depends(get_db)):
-    """Clears all expenses, splits, and payments. Keeps members and categories."""
+def reset_all_data(
+    wipe_members: bool = Query(False),
+    wipe_categories: bool = Query(False),
+    admin: Member = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Clears all expenses, splits, payments, and recurring items for a 100% clean start. Requires Admin."""
     db.query(ExpenseSplit).delete()
     db.query(Expense).delete()
     db.query(Payment).delete()
+    db.query(RecurringExpense).delete()
+
+    if wipe_categories:
+        db.query(Category).delete()
+
+    if wipe_members:
+        # Preserve the authenticated admin account to prevent locked/orphaned state
+        db.query(Member).filter(Member.id != admin.id).delete()
+
     db.commit()
-    seed_initial_data(db)
-    return {"message": "Flat database reset to clean state with 6 members and 11 categories."}
+
+    # Clear uploaded receipts except placeholder
+    uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+    if os.path.exists(uploads_dir):
+        for fname in os.listdir(uploads_dir):
+            if fname != ".gitkeep":
+                fpath = os.path.join(uploads_dir, fname)
+                try:
+                    if os.path.isfile(fpath):
+                        os.remove(fpath)
+                except Exception:
+                    pass
+
+    return {"message": "Flat database wiped completely to a 100% clean fresh start."}
+

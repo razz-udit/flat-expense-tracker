@@ -218,10 +218,30 @@ Navigate to **Settings**:
 
 ---
 
-## 🔒 Financial Integrity Rules Enforced
+## 🔒 Financial & Security Integrity Rules Enforced
 
-1. **No Float Drift**: All amounts and splits use `Decimal(10, 2)` precision with exact penny/paise distribution.
-2. **Zero-Sum Conservation**: `Sum(All Net Balances) == 0` at all times.
-3. **Split Validation**: Total splits must equal the expense amount to 2 decimal places.
-4. **Historical Preservation**: Deleting or deactivating members and categories does not corrupt old transactions.
-5. **No Credential Storage**: Only standard UPI deep links and IDs are used; no banking passwords, PINs, or card details are ever requested or stored.
+1. **Cryptographic JWT Sessions**: Standard RFC 7519 JSON Web Tokens (HS256) signed with a minimum 32-character `AUTH_SECRET`. Standard claims `sub`, `iat`, `exp`, and `ver` are enforced.
+2. **Immediate Session Invalidation**: User credentials contain an authoritative `token_version`. Changing a password or resetting security credentials increments `token_version`, immediately invalidating all previous tokens.
+3. **Role-Based Admin Authorization**: Admin privileges are managed authoritatively via `Member.is_admin`, preventing spoofing and ensuring that member ordering or deletions never unintentionally transfer administrative privileges.
+4. **Environment Isolation**: Production strictly enforces `APP_ENV=production`. Test mock tokens are strictly forbidden outside of test environments (`APP_ENV=test`). Production deployment will abort startup if a strong secret or proper database connection is missing.
+5. **No Float Drift**: All amounts and splits use `Decimal(10, 2)` precision with exact penny/paise distribution.
+6. **Zero-Sum Conservation**: `Sum(All Net Balances) == 0` at all times.
+7. **Split Validation**: Total splits must equal the expense amount to 2 decimal places. Shares and percentage split modes persist across edits without precision loss.
+8. **Historical Preservation**: Deleting or deactivating members and categories does not corrupt old transactions.
+9. **Protected Administrative Operations**: Sensitive operations such as `/api/reset-data`, member creation/deletion, and flat reconfiguration require verified administrator authorization.
+
+---
+
+## ⚙️ Environment Variables
+
+Configure these in your hosting environment (e.g., Render Environment settings) or local `.env`:
+
+| Variable | Description | Default |
+|---|---|---|
+| `APP_ENV` | Environment mode (`development`, `test`, `production`) | `development` |
+| `AUTH_SECRET` | 32+ character cryptographic secret for signing JWTs | Auto-generated in Render, required in production |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Lifetime of issued JWT session tokens in minutes | `1440` (24 hours) |
+| `DATABASE_URL` | PostgreSQL or SQLite database connection URI | `sqlite:///./flat_expenses.db` |
+| `GOOGLE_CLIENT_ID` | Optional Google OAuth 2.0 Web Client ID for audience verification | None |
+| `CORS_ORIGINS` | Comma-separated list of allowed origins | Localhost + Render URL |
+

@@ -2,9 +2,6 @@ const API_BASE = (() => {
   if (import.meta.env?.VITE_API_URL) {
     return `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`;
   }
-  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
-    return 'https://flat-expense-tracker-backend.onrender.com/api';
-  }
   return '/api';
 })();
 
@@ -19,35 +16,81 @@ function getAuthToken() {
   return localStorage.getItem('flat_auth_token') || null;
 }
 
-async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
-  const activeUserId = getActiveUserId();
-  const authToken = getAuthToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(activeUserId ? { 'X-User-Id': String(activeUserId) } : {}),
-    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-    ...options.headers,
-  };
-
+export function clearAppCache() {
   try {
-    const response = await fetch(url, { ...options, headers });
-    if (!response.ok) {
-      let errorDetail = 'An error occurred';
-      try {
-        const errJson = await response.json();
-        errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
-      } catch (e) {
-        errorDetail = await response.text();
+    if (typeof sessionStorage !== 'undefined') {
+      const keysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('flat_')) {
+          keysToRemove.push(key);
+        }
       }
-      throw new Error(errorDetail || `HTTP error ${response.status}`);
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
     }
-    if (response.status === 204) return null;
-    return await response.json();
-  } catch (err) {
-    console.error(`API Request failed [${options.method || 'GET'} ${endpoint}]:`, err);
-    throw err;
+  } catch (_) {}
+}
+
+const inFlightRequests = new Map();
+
+async function request(endpoint, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  const url = `${API_BASE}${endpoint}`;
+
+  // If this is a mutation, clear cached responses
+  if (method !== 'GET') {
+    clearAppCache();
   }
+
+  // Deduplicate identical in-flight GET requests
+  const flightKey = `${method}:${url}`;
+  if (method === 'GET' && inFlightRequests.has(flightKey)) {
+    return inFlightRequests.get(flightKey);
+  }
+
+  const reqPromise = (async () => {
+    const activeUserId = getActiveUserId();
+    const authToken = getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(activeUserId ? { 'X-User-Id': String(activeUserId) } : {}),
+      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+      ...options.headers,
+    };
+
+    try {
+      const response = await fetch(url, { ...options, headers });
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('flat_auth_token');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('flat_unauthorized'));
+          }
+        }
+        let errorDetail = 'An error occurred';
+        try {
+          const errJson = await response.json();
+          errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+        } catch (e) {
+          errorDetail = await response.text();
+        }
+        throw new Error(errorDetail || `HTTP error ${response.status}`);
+      }
+      if (response.status === 204) return null;
+      return await response.json();
+    } catch (err) {
+      console.error(`API Request failed [${method} ${endpoint}]:`, err);
+      throw err;
+    } finally {
+      inFlightRequests.delete(flightKey);
+    }
+  })();
+
+  if (method === 'GET') {
+    inFlightRequests.set(flightKey, reqPromise);
+  }
+
+  return reqPromise;
 }
 
 export const api = {
@@ -96,6 +139,33 @@ export const api = {
     const qs = uid ? `?user_id=${uid}` : '';
     return request(`/expenses/${id}${qs}`, { method: 'DELETE' });
   },
+  evaluateExpense: (id, action, notes, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/expenses/${id}/evaluate${qs}`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes })
+    });
+  },
+  uploadReceipt: async (file) => {
+    const activeUserId = getActiveUserId();
+    const authToken = getAuthToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers = {
+      ...(activeUserId ? { 'X-User-Id': String(activeUserId) } : {}),
+      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+    };
+    const response = await fetch(`${API_BASE}/expenses/upload-receipt`, {
+      method: 'POST',
+      body: formData,
+      headers
+    });
+    if (!response.ok) {
+      throw new Error('Failed to upload receipt screenshot');
+    }
+    return await response.json();
+  },
 
   // Payments / Settlements
   getPayments: (params = {}) => {
@@ -108,7 +178,11 @@ export const api = {
     const qs = query.toString();
     return request(`/payments${qs ? `?${qs}` : ''}`);
   },
-  createPayment: (data) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
+  createPayment: (data, userId) => {
+    const uid = userId || getActiveUserId();
+    const qs = uid ? `?user_id=${uid}` : '';
+    return request(`/payments${qs}`, { method: 'POST', body: JSON.stringify(data) });
+  },
   updatePayment: (id, data, userId) => {
     const uid = userId || getActiveUserId();
     const qs = uid ? `?user_id=${uid}` : '';
@@ -196,3 +270,15 @@ export const api = {
   // Database Reset
   resetData: () => request('/reset-data', { method: 'POST' }),
 };
+
+export function getReceiptFullUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (import.meta.env?.VITE_API_URL) {
+    const base = import.meta.env.VITE_API_URL.replace(/\/$/, '').replace(/\/api$/, '');
+    return `${base}${url}`;
+  }
+  return url;
+}
