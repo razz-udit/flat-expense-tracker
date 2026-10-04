@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { api, clearAppCache } from '../services/api';
 
 const AppContext = createContext();
 
@@ -27,8 +27,11 @@ export function AppProvider({ children }) {
     return saved ? parseInt(saved, 10) : null;
   });
 
-  // Only show full-page bootstrap loading on first visit when no cached metadata exists
+  // Only show full-page bootstrap loading when user is authenticated but cached metadata is missing
   const [isLoadingMeta, setIsLoadingMeta] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const token = localStorage.getItem('flat_auth_token');
+    if (!token) return false;
     try {
       const cached = localStorage.getItem('flat_cached_members');
       return !(cached && JSON.parse(cached).length > 0);
@@ -69,6 +72,12 @@ export function AppProvider({ children }) {
   }, []);
 
   const refreshMeta = useCallback(async (options = {}) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('flat_auth_token') : null;
+    if (!token) {
+      setIsLoadingMeta(false);
+      return;
+    }
+
     const shouldShowLoader = options.forceLoading;
     if (shouldShowLoader) {
       setIsLoadingMeta(true);
@@ -102,14 +111,25 @@ export function AppProvider({ children }) {
       }
     } catch (err) {
       console.error('Failed to load initial metadata:', err);
-      addToast('Could not load flat members and categories. Is the backend running?', 'error');
+      const isAuthErr = err?.message?.toLowerCase().includes('credential') || 
+                        err?.message?.toLowerCase().includes('token') || 
+                        err?.message?.toLowerCase().includes('unauthorized') ||
+                        err?.message?.toLowerCase().includes('401');
+      if (!isAuthErr) {
+        addToast('Could not load flat members and categories. Is the backend running?', 'error');
+      }
     } finally {
       setIsLoadingMeta(false);
     }
   }, [addToast]);
 
   useEffect(() => {
-    refreshMeta();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('flat_auth_token') : null;
+    if (token) {
+      refreshMeta();
+    } else {
+      setIsLoadingMeta(false);
+    }
   }, [refreshMeta]);
 
   const login = (memberId) => {
@@ -122,12 +142,17 @@ export function AppProvider({ children }) {
   const loginWithCredentials = async (identifier, password) => {
     const res = await api.login(identifier, password);
     if (res.success && res.member) {
-      setActiveMemberId(res.member.id);
-      localStorage.setItem('flat_current_user_id', res.member.id);
-      localStorage.setItem('flat_active_member_id', res.member.id);
       if (res.token) {
         localStorage.setItem('flat_auth_token', res.token);
       }
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === res.member.id);
+        return exists ? prev.map((m) => m.id === res.member.id ? res.member : m) : [...prev, res.member];
+      });
+      await refreshMeta();
       return res.member;
     }
     throw new Error(res.message || 'Login failed');
@@ -136,12 +161,17 @@ export function AppProvider({ children }) {
   const setPasswordAndLogin = async (identifier, newPassword) => {
     const res = await api.setPassword(identifier, newPassword);
     if (res.success && res.member) {
-      setActiveMemberId(res.member.id);
-      localStorage.setItem('flat_current_user_id', res.member.id);
-      localStorage.setItem('flat_active_member_id', res.member.id);
       if (res.token) {
         localStorage.setItem('flat_auth_token', res.token);
       }
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === res.member.id);
+        return exists ? prev.map((m) => m.id === res.member.id ? res.member : m) : [...prev, res.member];
+      });
+      await refreshMeta();
       return res.member;
     }
     throw new Error(res.message || 'Failed to set password');
@@ -150,13 +180,17 @@ export function AppProvider({ children }) {
   const signupAndLogin = async (data) => {
     const res = await api.signup(data);
     if (res.success && res.member) {
-      await refreshMeta();
-      setActiveMemberId(res.member.id);
-      localStorage.setItem('flat_current_user_id', res.member.id);
-      localStorage.setItem('flat_active_member_id', res.member.id);
       if (res.token) {
         localStorage.setItem('flat_auth_token', res.token);
       }
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === res.member.id);
+        return exists ? prev.map((m) => m.id === res.member.id ? res.member : m) : [...prev, res.member];
+      });
+      await refreshMeta();
       return res.member;
     }
     throw new Error(res.message || 'Signup failed');
@@ -165,13 +199,17 @@ export function AppProvider({ children }) {
   const loginWithGoogle = async (googlePayload) => {
     const res = await api.googleAuth(googlePayload);
     if (res.success && res.member) {
-      await refreshMeta();
-      setActiveMemberId(res.member.id);
-      localStorage.setItem('flat_current_user_id', res.member.id);
-      localStorage.setItem('flat_active_member_id', res.member.id);
       if (res.token) {
         localStorage.setItem('flat_auth_token', res.token);
       }
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === res.member.id);
+        return exists ? prev.map((m) => m.id === res.member.id ? res.member : m) : [...prev, res.member];
+      });
+      await refreshMeta();
       return res.member;
     }
     throw new Error(res.message || 'Google sign-in failed');
@@ -180,13 +218,17 @@ export function AppProvider({ children }) {
   const claimAccountAndLogin = async (token, newPassword) => {
     const res = await api.claimAccount(token, newPassword);
     if (res.success && res.member) {
-      await refreshMeta();
-      setActiveMemberId(res.member.id);
-      localStorage.setItem('flat_current_user_id', res.member.id);
-      localStorage.setItem('flat_active_member_id', res.member.id);
       if (res.token) {
         localStorage.setItem('flat_auth_token', res.token);
       }
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === res.member.id);
+        return exists ? prev.map((m) => m.id === res.member.id ? res.member : m) : [...prev, res.member];
+      });
+      await refreshMeta();
       return res.member;
     }
     throw new Error(res.message || 'Failed to claim account');
@@ -197,6 +239,11 @@ export function AppProvider({ children }) {
     localStorage.removeItem('flat_current_user_id');
     localStorage.removeItem('flat_active_member_id');
     localStorage.removeItem('flat_auth_token');
+    localStorage.removeItem('flat_cached_members');
+    localStorage.removeItem('flat_cached_categories');
+    setMembers([]);
+    setCategories([]);
+    clearAppCache();
   };
 
   useEffect(() => {

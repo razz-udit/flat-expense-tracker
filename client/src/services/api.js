@@ -62,9 +62,12 @@ async function request(endpoint, options = {}) {
       const response = await fetch(url, { ...options, headers });
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem('flat_auth_token');
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('flat_unauthorized'));
+          const isAuthEndpoint = endpoint.startsWith('/auth/');
+          if (authToken && !isAuthEndpoint) {
+            localStorage.removeItem('flat_auth_token');
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('flat_unauthorized'));
+            }
           }
         }
         let errorDetail = 'An error occurred';
