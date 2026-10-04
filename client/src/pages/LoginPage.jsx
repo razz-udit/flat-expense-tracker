@@ -58,6 +58,7 @@ export default function LoginPage() {
   const [clientIdInput, setClientIdInput] = useState(googleClientId || DEFAULT_GOOGLE_CLIENT_ID);
 
   const googleBtnRef = useRef(null);
+  const hasRenderedGoogleBtnRef = useRef(false);
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
@@ -102,14 +103,19 @@ export default function LoginPage() {
     }
   }, [loginWithGoogle, addToast, navigate]);
 
-  // Initialize Google Identity Services (GSI) when client ID is available
+  // Initialize Google Identity Services (GSI) ONCE without continuous polling
   useEffect(() => {
     if (!googleClientId) return;
+    hasRenderedGoogleBtnRef.current = false;
 
-    let isSubscribed = true;
+    let intervalId = null;
 
-    const checkAndInitGoogle = () => {
-      if (!isSubscribed) return;
+    const initGoogleOnce = () => {
+      if (hasRenderedGoogleBtnRef.current) {
+        if (intervalId) clearInterval(intervalId);
+        return;
+      }
+
       if (window.google?.accounts?.id && googleBtnRef.current) {
         try {
           window.google.accounts.id.initialize({
@@ -118,16 +124,18 @@ export default function LoginPage() {
             auto_select: false,
           });
 
-          // Clear previous buttons if any
-          if (googleBtnRef.current) {
-            googleBtnRef.current.innerHTML = '';
-            window.google.accounts.id.renderButton(googleBtnRef.current, {
-              theme: 'filled_blue',
-              size: 'large',
-              shape: 'pill',
-              width: 300,
-              text: 'continue_with',
-            });
+          googleBtnRef.current.innerHTML = '';
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'filled_blue',
+            size: 'large',
+            shape: 'pill',
+            width: 300,
+            text: 'continue_with',
+          });
+
+          hasRenderedGoogleBtnRef.current = true;
+          if (intervalId) {
+            clearInterval(intervalId);
           }
         } catch (err) {
           console.error('Failed to initialize Google Sign-In button:', err);
@@ -135,15 +143,21 @@ export default function LoginPage() {
       }
     };
 
-    checkAndInitGoogle();
-    const interval = setInterval(checkAndInitGoogle, 600);
-    const timeout = setTimeout(() => clearInterval(interval), 5000);
+    // Attempt immediate initialization
+    initGoogleOnce();
 
-    return () => {
-      isSubscribed = false;
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
+    // If Google script tag is still downloading, poll until ready then stop immediately
+    if (!hasRenderedGoogleBtnRef.current) {
+      intervalId = setInterval(initGoogleOnce, 300);
+      const timeoutId = setTimeout(() => {
+        if (intervalId) clearInterval(intervalId);
+      }, 5000);
+
+      return () => {
+        if (intervalId) clearInterval(intervalId);
+        clearTimeout(timeoutId);
+      };
+    }
   }, [googleClientId, handleGoogleCredentialResponse]);
 
   const handleCompleteGoogleRegistration = async (e) => {
