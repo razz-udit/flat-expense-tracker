@@ -14,11 +14,20 @@ from app.routers import (
     auth_router
 )
 
+from sqlalchemy import text
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize tables
     Base.metadata.create_all(bind=engine)
-    # Seed default 6 members and 11 categories if table is fresh
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS google_id VARCHAR(100);"))
+            conn.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);"))
+            conn.commit()
+    except Exception:
+        pass
+    # Seed default members and categories if table is fresh
     db = SessionLocal()
     try:
         seed_initial_data(db)

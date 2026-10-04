@@ -1,4 +1,6 @@
 import secrets
+import base64
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -7,6 +9,7 @@ from app.models.member import Member
 from app.schemas.auth import (
     LoginRequest, 
     SignUpRequest,
+    GoogleAuthRequest,
     LoginResponse, 
     SetPasswordRequest,
     ChangePasswordRequest, 
@@ -36,6 +39,103 @@ def find_member_by_identifier(ident: str, db: Session) -> Member:
         member = query.filter(func.lower(Member.name) == clean_ident.lower()).first()
 
     return member
+
+def parse_google_jwt(credential: str) -> dict:
+    try:
+        parts = credential.strip().split(".")
+        if len(parts) < 2:
+            return {}
+        payload_b64 = parts[1]
+        rem = len(payload_b64) % 4
+        if rem > 0:
+            payload_b64 += "=" * (4 - rem)
+        return json.loads(base64.urlsafe_b64decode(payload_b64).decode("utf-8"))
+    except Exception:
+        return {}
+
+@router.post("/google", response_model=LoginResponse)
+def google_auth(data: GoogleAuthRequest, db: Session = Depends(get_db)):
+    email = data.email
+    name = data.name
+    avatar_url = data.avatar_url
+    google_id = data.google_id
+
+    # If Google ID token JWT was provided, decode its payload
+    if data.credential:
+        payload = parse_google_jwt(data.credential)
+        email = payload.get("email") or email
+        name = payload.get("name") or name
+        avatar_url = payload.get("picture") or avatar_url
+        google_id = payload.get("sub") or google_id
+
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Google authentication failed: Email address could not be verified from Google account."
+        )
+
+    clean_email = email.strip().lower()
+    clean_name = (name or clean_email.split("@")[0]).strip()
+    clean_upi = data.upi_id.strip() if data.upi_id and data.upi_id.strip() else None
+
+    # 1. Search for existing member: google_id -> email -> name
+    member = None
+    if google_id:
+        member = db.query(Member).filter(Member.google_id == google_id, Member.is_active == True).first()
+
+    if not member and clean_email:
+        member = db.query(Member).filter(func.lower(Member.email) == clean_email, Member.is_active == True).first()
+
+    if not member and clean_name:
+        member = db.query(Member).filter(func.lower(Member.name) == clean_name.lower(), Member.is_active == True).first()
+
+    if member:
+        # Existing member: Link Google info
+        if google_id and not member.google_id:
+            member.google_id = google_id
+        if avatar_url and not member.avatar_url:
+            member.avatar_url = avatar_url
+        if clean_email and not member.email:
+            member.email = clean_email
+        if clean_upi and not member.upi_id:
+            member.upi_id = clean_upi
+        db.commit()
+        db.refresh(member)
+
+        token = create_access_token(member.id)
+        return LoginResponse(
+            success=True,
+            message=f"Welcome back, {member.name}! Signed in via Google.",
+            member=MemberOut.model_validate(member),
+            token=token
+        )
+
+    # 2. New member signing up with Google
+    if not clean_upi or "@" not in clean_upi or len(clean_upi) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="NEEDS_UPI_ID: A valid UPI ID is mandatory for receiving flat settlements (e.g. name@okhdfcbank or 9876543210@paytm)."
+        )
+
+    new_member = Member(
+        name=clean_name,
+        email=clean_email,
+        upi_id=clean_upi,
+        google_id=google_id,
+        avatar_url=avatar_url,
+        is_active=True
+    )
+    db.add(new_member)
+    db.commit()
+    db.refresh(new_member)
+
+    token = create_access_token(new_member.id)
+    return LoginResponse(
+        success=True,
+        message=f"Welcome to the flat, {new_member.name}! Registered with Google.",
+        member=MemberOut.model_validate(new_member),
+        token=token
+    )
 
 @router.post("/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)

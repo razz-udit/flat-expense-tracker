@@ -13,6 +13,8 @@ class Member(Base):
     email = Column(String(150), nullable=True)
     upi_id = Column(String(100), nullable=True)
     password_hash = Column(String(255), nullable=True)
+    google_id = Column(String(100), unique=True, index=True, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 

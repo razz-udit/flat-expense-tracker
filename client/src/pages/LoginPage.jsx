@@ -1,112 +1,211 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { 
   Building2, 
-  Lock, 
-  User, 
-  Mail, 
   QrCode, 
+  AlertCircle, 
+  CheckCircle2, 
   ArrowRight, 
-  KeyRound, 
-  AlertCircle,
-  Eye,
-  EyeOff,
-  UserPlus,
-  Sparkles,
-  Download,
-  Smartphone
+  ShieldCheck, 
+  Sparkles, 
+  Download, 
+  Smartphone,
+  Mail,
+  User
 } from 'lucide-react';
 
+function GoogleLogo({ className = "w-5 h-5" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+      />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
-  const { loginWithCredentials, signupAndLogin, addToast, promptInstall } = useApp();
+  const navigate = useNavigate();
+  const { loginWithGoogle, addToast, promptInstall, currentUser } = useApp();
 
-  const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
-
-  // Login form state
-  const [identifier, setIdentifier] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-
-  // Signup form state
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupUpi, setSignupUpi] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
-
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // Pending Google data for new members who need to register their settlement UPI ID
+  const [pendingGoogleData, setPendingGoogleData] = useState(null);
+  const [upiInput, setUpiInput] = useState('');
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
+  // Fallback Google Sign-In state (when VITE_GOOGLE_CLIENT_ID is not configured)
+  const [showManualGoogleModal, setShowManualGoogleModal] = useState(false);
+  const [manualGoogleEmail, setManualGoogleEmail] = useState('');
+  const [manualGoogleName, setManualGoogleName] = useState('');
+  const [manualGoogleUpi, setManualGoogleUpi] = useState('');
 
-    if (!identifier.trim()) {
-      setErrorMsg('Please enter your Member Name, ID, or Email.');
-      return;
+  const googleBtnRef = useRef(null);
+  const googleClientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID;
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/', { replace: true });
     }
+  }, [currentUser, navigate]);
 
-    if (!loginPassword) {
-      setErrorMsg('Please enter your password.');
+  const handleGoogleCredentialResponse = useCallback(async (response) => {
+    if (!response?.credential) {
+      setErrorMsg('Google Sign-In was cancelled or failed.');
       return;
     }
 
     try {
       setIsLoading(true);
-      const member = await loginWithCredentials(identifier.trim(), loginPassword);
-      addToast(`Welcome back, ${member.name}!`, 'success');
+      setErrorMsg('');
+      const member = await loginWithGoogle({ credential: response.credential });
+      addToast(`Welcome, ${member.name}! Signed in via Google.`, 'success');
+      navigate('/', { replace: true });
     } catch (err) {
-      console.error('Login error:', err);
-      setErrorMsg(err.message || 'Invalid credentials. Please verify your Name and password.');
+      console.error('Google Sign-In error:', err);
+      if (err.message && err.message.includes('NEEDS_UPI_ID')) {
+        // Parse payload to pre-fill name and email for completing registration
+        try {
+          const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+          setPendingGoogleData({
+            credential: response.credential,
+            email: payload.email,
+            name: payload.name,
+            avatar_url: payload.picture,
+            google_id: payload.sub,
+          });
+        } catch {
+          setPendingGoogleData({ credential: response.credential });
+        }
+      } else {
+        setErrorMsg(err.message || 'Google authentication failed.');
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loginWithGoogle, addToast, navigate]);
 
-  const handleSignupSubmit = async (e) => {
+  // Initialize Google Identity Services (GSI) if client ID is configured
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const checkAndInitGoogle = () => {
+      if (window.google?.accounts?.id && googleBtnRef.current) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+          });
+
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'filled_blue',
+            size: 'large',
+            shape: 'pill',
+            width: 320,
+            text: 'continue_with',
+          });
+        } catch (err) {
+          console.error('Failed to initialize Google Sign-In button:', err);
+        }
+      }
+    };
+
+    checkAndInitGoogle();
+    const interval = setInterval(checkAndInitGoogle, 500);
+    const timeout = setTimeout(() => clearInterval(interval), 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [googleClientId, handleGoogleCredentialResponse]);
+
+  const handleCompleteGoogleRegistration = async (e) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!signupName.trim() || signupName.trim().length < 2) {
-      setErrorMsg('Please enter your name (at least 2 characters).');
-      return;
-    }
-
-    if (!signupUpi.trim() || !signupUpi.includes('@') || signupUpi.trim().length < 3) {
-      setErrorMsg('A valid UPI ID is mandatory (e.g. yourname@okaxis, 9876543210@paytm) so flatmates can settle debts with you.');
-      return;
-    }
-
-    if (!signupPassword || signupPassword.length < 4) {
-      setErrorMsg('Password must be at least 4 characters long.');
-      return;
-    }
-
-    if (signupPassword !== signupConfirmPassword) {
-      setErrorMsg('Passwords do not match. Please verify.');
+    if (!upiInput.trim() || !upiInput.includes('@') || upiInput.trim().length < 3) {
+      setErrorMsg('Please enter a valid UPI ID (e.g. yourname@okaxis or 9876543210@paytm) so flatmates can settle debts with you.');
       return;
     }
 
     try {
       setIsLoading(true);
-      const member = await signupAndLogin({
-        name: signupName.trim(),
-        email: signupEmail.trim() || null,
-        upi_id: signupUpi.trim() || null,
-        password: signupPassword,
+      const member = await loginWithGoogle({
+        ...pendingGoogleData,
+        upi_id: upiInput.trim(),
       });
-      addToast(`Account created! Welcome to the flat, ${member.name}!`, 'success');
+      addToast(`Welcome to the flat, ${member.name}! Account registered with Google.`, 'success');
+      navigate('/', { replace: true });
     } catch (err) {
-      console.error('Sign up error:', err);
-      setErrorMsg(err.message || 'Failed to create account.');
+      console.error('Registration error:', err);
+      setErrorMsg(err.message || 'Failed to complete registration.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const switchMode = (mode) => {
-    setAuthMode(mode);
+  const handleManualGoogleAuthSubmit = async (e) => {
+    e.preventDefault();
     setErrorMsg('');
+
+    if (!manualGoogleEmail.trim() || !manualGoogleEmail.includes('@')) {
+      setErrorMsg('Please enter a valid Google email address.');
+      return;
+    }
+
+    if (!manualGoogleName.trim() || manualGoogleName.trim().length < 2) {
+      setErrorMsg('Please enter your full name (at least 2 characters).');
+      return;
+    }
+
+    if (!manualGoogleUpi.trim() || !manualGoogleUpi.includes('@')) {
+      setErrorMsg('A valid UPI ID is mandatory for receiving flat payments (e.g. name@okhdfcbank or 9876543210@paytm).');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const member = await loginWithGoogle({
+        email: manualGoogleEmail.trim().toLowerCase(),
+        name: manualGoogleName.trim(),
+        upi_id: manualGoogleUpi.trim(),
+        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(manualGoogleName.trim())}`,
+      });
+      addToast(`Welcome, ${member.name}! Signed in via Google.`, 'success');
+      setShowManualGoogleModal(false);
+      navigate('/', { replace: true });
+    } catch (err) {
+      console.error('Google Auth error:', err);
+      setErrorMsg(err.message || 'Failed to authenticate with Google.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleClick = () => {
+    if (googleClientId && window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
+    } else {
+      setShowManualGoogleModal(true);
+    }
   };
 
   return (
@@ -140,48 +239,22 @@ export default function LoginPage() {
       <main className="max-w-md w-full mx-auto my-auto py-4">
         <div className="bg-white/10 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
           {/* Title Area */}
-          <div className="text-center space-y-1.5">
+          <div className="text-center space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-1">
-              {authMode === 'login' ? <KeyRound className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
-              <span>{authMode === 'login' ? 'Roommate Sign In' : 'New Flatmate Registration'}</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Mandatory Google Authentication</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {authMode === 'login' ? 'Sign In to Flat' : 'Create New Account'}
+              {pendingGoogleData ? 'Almost Done!' : 'Sign In with Google'}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300">
-              {authMode === 'login'
-                ? 'Enter your credentials to access your dashboard.'
-                : 'Sign up with your name and password to join the flat.'}
+            <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
+              {pendingGoogleData
+                ? 'Please add your personal UPI ID so flatmates can settle debts with you instantly.'
+                : 'Sign in directly with your Google account. No passwords to remember or forget!'}
             </p>
           </div>
 
-          {/* Mode Switch Tabs */}
-          <div className="flex rounded-xl bg-slate-900/60 p-1 border border-white/10 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => switchMode('login')}
-              className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
-                authMode === 'login'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('signup')}
-              className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
-                authMode === 'signup'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {/* Error Message */}
+          {/* Error Alert */}
           {errorMsg && (
             <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2.5 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -189,116 +262,25 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Sign In Form */}
-          {authMode === 'login' ? (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Member Name, Email, or ID
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <User className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your Name, Email, or ID"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
-                  />
+          {/* Step 2: Prompt for UPI ID if new user signing up via Google */}
+          {pendingGoogleData ? (
+            <form onSubmit={handleCompleteGoogleRegistration} className="space-y-4">
+              <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-700/60 text-xs space-y-1">
+                <div className="font-bold text-white flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Google Account Verified</span>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Enter your password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-2.5 text-slate-400 hover:text-white p-0.5 cursor-pointer"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Authenticating...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to Dashboard</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
+                {pendingGoogleData.name && (
+                  <p className="text-slate-300 font-medium">Name: {pendingGoogleData.name}</p>
                 )}
-              </button>
-            </form>
-          ) : (
-            /* Sign Up / Create Account Form */
-            <form onSubmit={handleSignupSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Your Full Name <span className="text-indigo-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <User className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rahul Sharma"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
-                  />
-                </div>
+                {pendingGoogleData.email && (
+                  <p className="text-slate-400">Email: {pendingGoogleData.email}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Email Address <span className="text-slate-500 text-[10px] lowercase">(optional)</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Mail className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="email"
-                    placeholder="e.g. rahul@example.com"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  UPI ID for Settlements <span className="text-emerald-400">*</span>
+                  Your UPI ID <span className="text-rose-400">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-3 text-slate-400">
@@ -307,108 +289,181 @@ export default function LoginPage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. rahul@okaxis, 9876543210@paytm"
-                    value={signupUpi}
-                    onChange={(e) => setSignupUpi(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all font-mono"
+                    placeholder="e.g. rahul@okaxis or 9876543210@paytm"
+                    value={upiInput}
+                    onChange={(e) => setUpiInput(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Required: Roommates will pay settlements directly to this UPI address.
+                  Required for flat settlements so roommates can send you payments with 1 click.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Create Password (Min 4 chars) <span className="text-indigo-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={4}
-                    placeholder="Create a password"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-2.5 text-slate-400 hover:text-white p-0.5 cursor-pointer"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingGoogleData(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <span>Registering...</span>
+                  ) : (
+                    <>
+                      <span>Complete Google Sign Up</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Confirm Password <span className="text-indigo-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={4}
-                    placeholder="Re-enter your password"
-                    value={signupConfirmPassword}
-                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all font-mono"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full mt-3 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>Create Account & Join Flat</span>
-                  </>
-                )}
-              </button>
             </form>
-          )}
+          ) : (
+            /* Primary Mandatory Google Sign-In Action */
+            <div className="space-y-4">
+              {/* Google Button Container (rendered by Google GIS if client ID configured) */}
+              <div className="flex flex-col items-center justify-center space-y-3">
+                <div ref={googleBtnRef} id="google-btn-container" className="min-h-[44px] flex items-center justify-center"></div>
 
-          {/* Quick Switch Link */}
-          <div className="pt-2 text-center">
-            {authMode === 'login' ? (
-              <button
-                type="button"
-                onClick={() => switchMode('signup')}
-                className="text-xs text-indigo-300 hover:text-white underline cursor-pointer"
-              >
-                Don't have an account? Sign Up to join the flat →
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className="text-xs text-indigo-300 hover:text-white underline cursor-pointer"
-              >
-                Already have an account? Sign In here →
-              </button>
-            )}
-          </div>
+                {/* Custom Google Sign In Button */}
+                <button
+                  type="button"
+                  onClick={handleGoogleClick}
+                  disabled={isLoading}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-black text-sm shadow-xl flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200"
+                >
+                  <GoogleLogo className="w-5 h-5 shrink-0" />
+                  <span>Continue with Google</span>
+                </button>
+              </div>
+
+              {/* Security highlights */}
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-white/10 space-y-2 text-xs text-slate-300">
+                <div className="flex items-center gap-2 font-bold text-indigo-300">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Why Google Only?</span>
+                </div>
+                <ul className="space-y-1 text-slate-400 text-[11px] list-disc list-inside">
+                  <li>No passwords to remember, reset, or forget.</li>
+                  <li>One-click instant authentication on phone and desktop.</li>
+                  <li>Guaranteed account ownership for expense verification.</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Mobile Install App banner */}
+        {/* Manual / Development Google Sign-In Modal */}
+        {showManualGoogleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+            <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <GoogleLogo className="w-5 h-5" />
+                  <h3 className="font-extrabold text-base text-white">Google Sign-In</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManualGoogleModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                Sign in with your Google account credentials. If you are a new roommate, your account will be created automatically.
+              </p>
+
+              <form onSubmit={handleManualGoogleAuthSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
+                    Google Email <span className="text-indigo-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-slate-400">
+                      <Mail className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. uditraj@gmail.com"
+                      value={manualGoogleEmail}
+                      onChange={(e) => setManualGoogleEmail(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
+                    Your Full Name <span className="text-indigo-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-slate-400">
+                      <User className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Udit Raj"
+                      value={manualGoogleName}
+                      onChange={(e) => setManualGoogleName(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
+                    Your Settlement UPI ID <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-slate-400">
+                      <QrCode className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 7992311040@paytm or name@okhdfcbank"
+                      value={manualGoogleUpi}
+                      onChange={(e) => setManualGoogleUpi(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Used so flatmates can pay you when debts are settled.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualGoogleModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    {isLoading ? <span>Signing In...</span> : <span>Sign In with Google</span>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Install App banner (preserved exclusively on login page) */}
         <div className="mt-3 p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between text-xs backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Smartphone className="w-4 h-4 text-indigo-400" />
@@ -426,7 +481,7 @@ export default function LoginPage() {
 
       {/* Footer */}
       <footer className="max-w-md w-full mx-auto text-center py-3 text-xs text-slate-500">
-        FlatMatePay • Private Flat Expense & Settlement Manager
+        FlatMatePay • Protected with Google OAuth
       </footer>
     </div>
   );

@@ -140,6 +140,11 @@ export const api = {
   getMonthlySummary: (year, month) => request(`/monthly-summary/${year}/${month}`),
 
   // Authentication
+  googleAuth: (payload) =>
+    request('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   signup: (data) =>
     request('/auth/signup', {
       method: 'POST',

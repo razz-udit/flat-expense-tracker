@@ -19,6 +19,7 @@ class MemberUpdate(BaseModel):
 class MemberOut(MemberBase):
     id: int
     is_active: bool
+    avatar_url: Optional[str] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

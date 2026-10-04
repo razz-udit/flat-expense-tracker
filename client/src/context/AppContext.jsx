@@ -125,7 +125,22 @@ export function AppProvider({ children }) {
       }
       return res.member;
     }
-    throw new Error(res.message || 'Sign up failed');
+    throw new Error(res.message || 'Signup failed');
+  };
+
+  const loginWithGoogle = async (googlePayload) => {
+    const res = await api.googleAuth(googlePayload);
+    if (res.success && res.member) {
+      await refreshMeta();
+      setActiveMemberId(res.member.id);
+      localStorage.setItem('flat_current_user_id', res.member.id);
+      localStorage.setItem('flat_active_member_id', res.member.id);
+      if (res.token) {
+        localStorage.setItem('flat_auth_token', res.token);
+      }
+      return res.member;
+    }
+    throw new Error(res.message || 'Google sign-in failed');
   };
 
   const logout = () => {
@@ -277,6 +292,7 @@ export function AppProvider({ children }) {
         activeMemberId,
         activeMember: currentUser,
         login,
+        loginWithGoogle,
         loginWithCredentials,
         setPasswordAndLogin,
         signupAndLogin,

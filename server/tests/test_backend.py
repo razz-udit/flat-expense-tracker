@@ -337,3 +337,80 @@ def test_expense_authorization_and_ownership(client):
     assert payer_delete.status_code == 200
     assert payer_delete.json()["message"] == "Expense deleted successfully"
 
+
+def test_google_auth_flow(client):
+    import base64
+    import json
+
+    # 1. Existing member logs in with Google (matching by member name "Member 1")
+    res1 = client.post("/api/auth/google", json={
+        "email": "member1@flat.internal",
+        "name": "Member 1",
+        "google_id": "google_uid_001",
+        "avatar_url": "https://lh3.googleusercontent.com/avatar1.png"
+    })
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["success"] is True
+    assert data1["member"]["name"] == "Member 1"
+    assert data1["token"] is not None
+
+    # Verify google_id and avatar were linked
+    members = client.get("/api/members").json()
+    m1 = next(m for m in members if m["name"] == "Member 1")
+    assert m1["avatar_url"] == "https://lh3.googleusercontent.com/avatar1.png"
+
+    # 2. New roommate logs in with Google but provides no UPI ID -> 400 NEEDS_UPI_ID
+    res_no_upi = client.post("/api/auth/google", json={
+        "email": "newroommate@flat.internal",
+        "name": "New Roommate",
+        "google_id": "google_uid_999"
+    })
+    assert res_no_upi.status_code == 400
+    assert "NEEDS_UPI_ID" in res_no_upi.json()["detail"]
+
+    # 3. New roommate provides invalid UPI ID -> 400 NEEDS_UPI_ID
+    res_bad_upi = client.post("/api/auth/google", json={
+        "email": "newroommate@flat.internal",
+        "name": "New Roommate",
+        "google_id": "google_uid_999",
+        "upi_id": "invalid_upi_no_at_symbol"
+    })
+    assert res_bad_upi.status_code == 400
+    assert "NEEDS_UPI_ID" in res_bad_upi.json()["detail"]
+
+    # 4. New roommate provides valid UPI ID -> 200 Created & logged in
+    res_new = client.post("/api/auth/google", json={
+        "email": "newroommate@flat.internal",
+        "name": "New Roommate",
+        "google_id": "google_uid_999",
+        "upi_id": "newroommate@okhdfcbank",
+        "avatar_url": "https://lh3.googleusercontent.com/avatar_new.png"
+    })
+    assert res_new.status_code == 200
+    data_new = res_new.json()
+    assert data_new["success"] is True
+    assert data_new["member"]["name"] == "New Roommate"
+    assert data_new["member"]["upi_id"] == "newroommate@okhdfcbank"
+    assert data_new["token"] is not None
+
+    # 5. Simulated Google Identity Services JWT credential decode
+    mock_payload = {
+        "email": "jwtuser@flat.internal",
+        "name": "Google JWT User",
+        "sub": "google_jwt_sub_12345",
+        "picture": "https://lh3.googleusercontent.com/jwt.png"
+    }
+    encoded_payload = base64.urlsafe_b64encode(json.dumps(mock_payload).encode()).decode().rstrip("=")
+    fake_jwt = f"eyJhbGciOiJSUzI1NiJ9.{encoded_payload}.mocksignature"
+
+    res_jwt = client.post("/api/auth/google", json={
+        "credential": fake_jwt,
+        "upi_id": "jwtuser@paytm"
+    })
+    assert res_jwt.status_code == 200
+    data_jwt = res_jwt.json()
+    assert data_jwt["success"] is True
+    assert data_jwt["member"]["name"] == "Google JWT User"
+    assert data_jwt["member"]["upi_id"] == "jwtuser@paytm"
+
