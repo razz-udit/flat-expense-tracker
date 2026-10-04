@@ -30,8 +30,6 @@ import {
 export default function ExpensesPage() {
   const { members, categories, currentUser, openAddExpense, addToast, refreshMeta } = useApp();
 
-  const hasFilters = Boolean(search.trim() || selectedCategory || selectedPaidBy || selectedMemberInSplit || selectedPaymentMethod || selectedVerificationStatus || startDate || endDate);
-
   const [expenses, setExpenses] = useState(() => {
     try {
       const cached = sessionStorage.getItem('flat_expenses_cache');
@@ -51,6 +49,8 @@ export default function ExpensesPage() {
   const [selectedVerificationStatus, setSelectedVerificationStatus] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  const hasFilters = Boolean(search.trim() || selectedCategory || selectedPaidBy || selectedMemberInSplit || selectedPaymentMethod || selectedVerificationStatus || startDate || endDate);
 
   // Expanded expense for split details view
   const [expandedExpenseId, setExpandedExpenseId] = useState(null);
