@@ -7,10 +7,7 @@ import {
   AlertCircle, 
   CheckCircle2, 
   ArrowRight, 
-  ShieldCheck, 
-  Sparkles, 
   Download, 
-  Smartphone,
   Settings,
   ExternalLink
 } from 'lucide-react';
@@ -56,6 +53,7 @@ export default function LoginPage() {
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [clientIdInput, setClientIdInput] = useState(googleClientId || DEFAULT_GOOGLE_CLIENT_ID);
+  const [isGoogleBtnLoaded, setIsGoogleBtnLoaded] = useState(false);
 
   const googleBtnRef = useRef(null);
   const hasRenderedGoogleBtnRef = useRef(false);
@@ -77,12 +75,11 @@ export default function LoginPage() {
       setIsLoading(true);
       setErrorMsg('');
       const member = await loginWithGoogle({ credential: response.credential });
-      addToast(`Welcome, ${member.name}! Authenticated with Google API.`, 'success');
+      addToast(`Welcome, ${member.name}! Signed in via Google.`, 'success');
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Google Sign-In error:', err);
       if (err.message && err.message.includes('NEEDS_UPI_ID')) {
-        // Decode payload solely for displaying account confirmation UI to user
         try {
           const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
           setPendingGoogleData({
@@ -129,11 +126,12 @@ export default function LoginPage() {
             theme: 'filled_blue',
             size: 'large',
             shape: 'pill',
-            width: 300,
+            width: 320,
             text: 'continue_with',
           });
 
           hasRenderedGoogleBtnRef.current = true;
+          setIsGoogleBtnLoaded(true);
           if (intervalId) {
             clearInterval(intervalId);
           }
@@ -175,7 +173,7 @@ export default function LoginPage() {
         credential: pendingGoogleData.credential,
         upi_id: upiInput.trim(),
       });
-      addToast(`Welcome to the flat, ${member.name}! Registered via Google API.`, 'success');
+      addToast(`Welcome to the flat, ${member.name}! Registered via Google.`, 'success');
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Registration error:', err);
@@ -207,25 +205,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <header className="max-w-md w-full mx-auto flex items-center justify-between pt-2 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
             <h1 className="font-extrabold text-xl tracking-tight">
               FlatMate<span className="text-indigo-400">Pay</span>
             </h1>
-            <p className="text-xs text-indigo-200/70 font-medium">Flat Expense & Settlement Manager</p>
+            <p className="text-xs text-slate-400 font-medium">Flat Expense & Settlement Manager</p>
           </div>
         </div>
 
         <button
           type="button"
           onClick={promptInstall}
-          className="flex items-center gap-1.5 text-xs text-white font-bold bg-white/10 hover:bg-white/20 active:scale-95 px-3 py-1.5 rounded-xl border border-white/20 shadow-sm transition-all cursor-pointer"
+          className="flex items-center gap-1.5 text-xs text-white font-bold bg-white/10 hover:bg-white/20 active:scale-95 px-3.5 py-1.5 rounded-xl border border-white/15 shadow-sm transition-all cursor-pointer"
           title="Install FlatMatePay App"
         >
           <Download className="w-3.5 h-3.5 text-indigo-300" />
@@ -234,46 +232,42 @@ export default function LoginPage() {
       </header>
 
       {/* Main Card */}
-      <main className="max-w-md w-full mx-auto my-auto py-4">
-        <div className="bg-white/10 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <main className="max-w-md w-full mx-auto my-auto py-6">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 text-center backdrop-blur-sm">
           {/* Title Area */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Mandatory Google API Authentication</span>
-            </div>
+          <div className="space-y-1.5">
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {pendingGoogleData ? 'Almost Done!' : 'Sign In with Google'}
+              {pendingGoogleData ? 'Complete Registration' : 'Sign In'}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
+            <p className="text-xs sm:text-sm text-slate-400">
               {pendingGoogleData
-                ? 'Please add your personal UPI ID so flatmates can settle debts with you instantly.'
-                : 'Sign in securely using Google OAuth API. Real-time token verification guarantees flatmate identity.'}
+                ? 'Enter your UPI ID so flatmates can settle debts with you.'
+                : 'Sign in with Google to continue'}
             </p>
           </div>
 
           {/* Error Alert */}
           {errorMsg && (
-            <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2.5 animate-in fade-in">
+            <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in text-left">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <span className="leading-relaxed">{errorMsg}</span>
             </div>
           )}
 
-          {/* Step 2: Prompt for UPI ID if new user signing up via Google */}
+          {/* Step 2: UPI Registration for New User */}
           {pendingGoogleData ? (
-            <form onSubmit={handleCompleteGoogleRegistration} className="space-y-4">
-              <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-700/60 text-xs space-y-2">
+            <form onSubmit={handleCompleteGoogleRegistration} className="space-y-4 text-left">
+              <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 text-xs space-y-2">
                 <div className="font-bold text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Google Account Verified via API</span>
+                  <span>Google Account Verified</span>
                 </div>
                 <div className="flex items-center gap-3 pt-1">
                   {pendingGoogleData.avatar_url ? (
                     <img
                       src={pendingGoogleData.avatar_url}
                       alt={pendingGoogleData.name || 'User'}
-                      className="w-10 h-10 rounded-full border border-indigo-400/40 object-cover"
+                      className="w-10 h-10 rounded-full border border-indigo-500/40 object-cover"
                     />
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white">
@@ -301,7 +295,7 @@ export default function LoginPage() {
                     placeholder="e.g. rahul@okaxis or 9876543210@paytm"
                     value={upiInput}
                     onChange={(e) => setUpiInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -320,13 +314,13 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <span>Registering...</span>
                   ) : (
                     <>
-                      <span>Complete Google Sign Up</span>
+                      <span>Complete Registration</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -334,62 +328,21 @@ export default function LoginPage() {
               </div>
             </form>
           ) : (
-            /* Primary Mandatory Google Sign-In Action */
-            <div className="space-y-4">
-              {/* Google Button Container (rendered by Google GIS if client ID configured) */}
-              <div className="flex flex-col items-center justify-center space-y-3">
-                <div ref={googleBtnRef} id="google-btn-container" className="min-h-[44px] flex items-center justify-center"></div>
-
-                {/* Custom Google Sign In Trigger button */}
-                <button
-                  type="button"
-                  onClick={handleGoogleClick}
-                  disabled={isLoading}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-black text-sm shadow-xl flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200"
-                >
-                  <GoogleLogo className="w-5 h-5 shrink-0" />
-                  <span>Continue with Google</span>
-                </button>
-              </div>
-
-              {/* Status / Client ID connection reminder */}
-              {!googleClientId && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 text-xs text-amber-200 flex items-center justify-between">
-                  <span>Google Client ID not yet linked</span>
+            /* Single Minimalist Google Sign-In Action */
+            <div className="flex flex-col items-center justify-center pt-2">
+              {/* Google Button Container (Only ONE button rendered) */}
+              <div ref={googleBtnRef} id="google-btn-container" className="min-h-[46px] flex items-center justify-center">
+                {!isGoogleBtnLoaded && (
                   <button
                     type="button"
-                    onClick={() => setShowConfigModal(true)}
-                    className="font-bold underline hover:text-white cursor-pointer ml-2"
+                    onClick={handleGoogleClick}
+                    disabled={isLoading}
+                    className="py-3 px-6 rounded-full bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-sm shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-200 min-w-[280px]"
                   >
-                    Setup in 1 min →
+                    <GoogleLogo className="w-5 h-5 shrink-0" />
+                    <span>Continue with Google</span>
                   </button>
-                </div>
-              )}
-
-              {/* Security highlights */}
-              <div className="bg-slate-900/60 p-4 rounded-2xl border border-white/10 space-y-2 text-xs text-slate-300">
-                <div className="flex items-center justify-between font-bold text-indigo-300">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    <span>Verified with Google Public API</span>
-                  </div>
-                  {googleClientId && (
-                    <button
-                      type="button"
-                      onClick={() => setShowConfigModal(true)}
-                      className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
-                      title="Update Google Client ID"
-                    >
-                      <Settings className="w-3 h-3" />
-                      <span>Config</span>
-                    </button>
-                  )}
-                </div>
-                <ul className="space-y-1 text-slate-400 text-[11px] list-disc list-inside">
-                  <li>Tokens cryptographically validated via Google's tokeninfo API.</li>
-                  <li>Prevents password theft or unauthorized account access.</li>
-                  <li>One-click instant authentication on phone and desktop.</li>
-                </ul>
+                )}
               </div>
             </div>
           )}
@@ -419,7 +372,7 @@ export default function LoginPage() {
 
               <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
                 <p className="font-bold text-indigo-300 flex items-center gap-1.5">
-                  <span>How to get your free Google Client ID (1 minute):</span>
+                  <span>How to get your free Google Client ID:</span>
                   <a
                     href="https://console.cloud.google.com/apis/credentials"
                     target="_blank"
@@ -431,9 +384,8 @@ export default function LoginPage() {
                 </p>
                 <ol className="list-decimal list-inside space-y-1 text-slate-300">
                   <li>Go to Google Cloud Console Credentials.</li>
-                  <li>Click <strong>Create Credentials</strong> → <strong>OAuth client ID</strong>.</li>
-                  <li>Select <strong>Web application</strong>.</li>
-                  <li>Add Authorized JavaScript origins:
+                  <li>Click <strong>Create Credentials</strong> → <strong>OAuth client ID</strong> (Web application).</li>
+                  <li>Add Authorized JavaScript origin:
                     <code className="block mt-0.5 text-[10px] text-indigo-300 bg-slate-900 p-1 rounded">
                       {window.location.origin}
                     </code>
@@ -476,26 +428,20 @@ export default function LoginPage() {
             </div>
           </div>
         )}
-
-        {/* Mobile Install App banner (preserved exclusively on login page) */}
-        <div className="mt-3 p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between text-xs backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <Smartphone className="w-4 h-4 text-indigo-400" />
-            <span className="text-slate-300">Using FlatMatePay on mobile?</span>
-          </div>
-          <button
-            type="button"
-            onClick={promptInstall}
-            className="text-indigo-300 font-bold hover:text-white underline cursor-pointer"
-          >
-            Install to Home Screen →
-          </button>
-        </div>
       </main>
 
       {/* Footer */}
-      <footer className="max-w-md w-full mx-auto text-center py-3 text-xs text-slate-500">
-        FlatMatePay • Protected with Google OAuth API
+      <footer className="max-w-md w-full mx-auto text-center py-3 text-xs text-slate-500 flex items-center justify-center gap-2">
+        <span>FlatMatePay</span>
+        <span>•</span>
+        <button
+          type="button"
+          onClick={() => setShowConfigModal(true)}
+          className="text-slate-500 hover:text-slate-300 transition-colors cursor-pointer flex items-center gap-1"
+          title="OAuth Settings"
+        >
+          <Settings className="w-3 h-3" />
+        </button>
       </footer>
     </div>
   );
