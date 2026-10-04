@@ -152,6 +152,7 @@ has_wildcard = "*" in cors_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if has_wildcard else cors_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=not has_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],

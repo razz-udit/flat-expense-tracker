@@ -80,6 +80,9 @@ async function request(endpoint, options = {}) {
       return await response.json();
     } catch (err) {
       console.error(`API Request failed [${method} ${endpoint}]:`, err);
+      if (err instanceof TypeError && err.message?.toLowerCase().includes('failed to fetch')) {
+        throw new Error('Unable to connect to the backend server. The free Render instance may be spinning up from cold sleep (takes ~30-50s) or CORS access is updating. Please try again shortly.');
+      }
       throw err;
     } finally {
       inFlightRequests.delete(flightKey);

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Union[str, List[str]] = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:8000,http://127.0.0.1:8000,"
+        "https://flat-expense-tracker-frontend.onrender.com,"
+        "https://flat-expense-tracker-backend.onrender.com,"
         "https://flat-payment-tracker.onrender.com"
     )
 
